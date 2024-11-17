@@ -1,52 +1,9 @@
-/* Copyright 2012 Mozilla Foundation
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-// eslint-disable-next-line max-len
-/** @typedef {import("../src/display/optional_content_config").OptionalContentConfig} OptionalContentConfig */
-// eslint-disable-next-line max-len
-/** @typedef {import("../src/display/display_utils").PageViewport} PageViewport */
-/** @typedef {import("./event_utils").EventBus} EventBus */
-/** @typedef {import("./interfaces").IPDFLinkService} IPDFLinkService */
-/** @typedef {import("./interfaces").IRenderableView} IRenderableView */
-// eslint-disable-next-line max-len
-/** @typedef {import("./pdf_rendering_queue").PDFRenderingQueue} PDFRenderingQueue */
-
 import { OutputScale, RenderingCancelledException } from "pdfjs-lib";
 import { RenderingStates } from "./ui_utils.js";
 
 const DRAW_UPSCALE_FACTOR = 2; // See comment in `PDFThumbnailView.draw` below.
 const MAX_NUM_SCALING_STEPS = 3;
-const THUMBNAIL_WIDTH = 98; // px
-
-/**
- * @typedef {Object} PDFThumbnailViewOptions
- * @property {HTMLDivElement} container - The viewer element.
- * @property {EventBus} eventBus - The application event bus.
- * @property {number} id - The thumbnail's unique ID (normally its number).
- * @property {PageViewport} defaultViewport - The page viewport.
- * @property {Promise<OptionalContentConfig>} [optionalContentConfigPromise] -
- *   A promise that is resolved with an {@link OptionalContentConfig} instance.
- *   The default value is `null`.
- * @property {IPDFLinkService} linkService - The navigation/linking service.
- * @property {PDFRenderingQueue} renderingQueue - The rendering queue object.
- * @property {Object} [pageColors] - Overwrites background and foreground colors
- *   with user defined ones in order to improve readability in high contrast
- *   mode.
- * @property {boolean} [enableHWA] - Enables hardware acceleration for
- *   rendering. The default value is `false`.
- */
+const THUMBNAIL_WIDTH = 128; // px
 
 class TempImageFactory {
   static #tempCanvas = null;
@@ -116,6 +73,7 @@ class PDFThumbnailView {
     this.renderingState = RenderingStates.INITIAL;
     this.resume = null;
 
+    // Create the anchor element
     const anchor = document.createElement("a");
     anchor.href = linkService.getAnchorUrl("#page=" + id);
     anchor.setAttribute("data-l10n-id", "pdfjs-thumb-page-title");
@@ -126,17 +84,71 @@ class PDFThumbnailView {
     };
     this.anchor = anchor;
 
+    // Call the setupLayout method to construct the thumbnail layout
+    this.setupLayout(container, anchor);
+  }
+
+  /**
+   * Sets up the layout of the thumbnail, including the image and action buttons.
+   * @param {HTMLElement} container - The container to append the thumbnail to.
+   * @param {HTMLElement} anchor - The anchor element wrapping the thumbnail.
+   */
+  setupLayout(container, anchor) {
+    // Create the thumbnail container
     const div = document.createElement("div");
     div.className = "thumbnail";
     div.setAttribute("data-page-number", this.id);
     this.div = div;
     this.#updateDims();
 
+    // Create the image placeholder
     const img = document.createElement("div");
     img.className = "thumbnailImage";
     this._placeholderImg = img;
 
     div.append(img);
+
+    // Create the actions container with buttons
+    const actionsDiv = document.createElement("div");
+    actionsDiv.className = "actions";
+
+    // Define the buttons and their corresponding icons and tooltips
+    const buttons = [
+      { class: "trash-icon", src: "./images/action-trash.png", tooltip: "Delete Page" },
+      { class: "copy-icon", src: "./images/action-copy.png", tooltip: "Copy Page" },
+      { class: "download-icon", src: "./images/action-download.png", tooltip: "Download Page" },
+      { class: "rotate-icon", src: "./images/action-rotate.png", tooltip: "Rotate PDF" },
+    ];
+
+    // Create and append each button to the actions container
+    buttons.forEach((btn) => {
+      const button = document.createElement("button");
+      button.className = "action-button";
+      button.title = btn.tooltip;
+      button.setAttribute("aria-label", btn.tooltip); // For accessibility
+  
+      // Create the img element for the icon
+      const iconImg = document.createElement("img");
+      iconImg.className = `icon ${btn.class}`;
+      iconImg.src = btn.src;
+      iconImg.alt = btn.alt; 
+      iconImg.width = 16;
+      iconImg.height = 16;
+  
+      button.appendChild(iconImg);
+  
+      // Add event listeners for each button
+      button.addEventListener("click", (event) => {
+        event.stopPropagation(); // Prevent triggering the thumbnail click
+        this.handleActionButtonClick(btn.class);
+      });
+  
+      actionsDiv.appendChild(button);
+    });
+
+    div.appendChild(actionsDiv); // Append actions to the thumbnail div
+
+    // Append the thumbnail to the anchor and container
     anchor.append(div);
     container.append(anchor);
   }
@@ -431,6 +443,91 @@ class PDFThumbnailView {
       return;
     }
     this.image?.setAttribute("data-l10n-args", this.#pageL10nArgs);
+  }
+
+  /**
+   * Handle action button clicks based on the button class.
+   * @param {string} action - The action corresponding to the button clicked.
+   */
+  handleActionButtonClick(action) {
+    switch (action) {
+      case "trash-icon":
+        this.deletePage();
+        break;
+      case "duplicate-icon":
+        this.duplicatePage();
+        break;
+      case "download-icon":
+        this.downloadPage();
+        break;
+      case "refresh-icon":
+        this.refreshThumbnail();
+        break;
+      default:
+        console.warn(`Unhandled action: ${action}`);
+    }
+  }
+
+  /**
+   * Delete the current page.
+   */
+  deletePage() {
+    // Implement the logic to delete the page
+    console.log(`Deleting page ${this.id}`);
+    // Example: Emit an event or directly interact with the PDF document
+    this.eventBus.dispatch("deletepage", { pageNumber: this.id });
+  }
+
+  /**
+   * Duplicate the current page.
+   */
+  duplicatePage() {
+    // Implement the logic to duplicate the page
+    console.log(`Duplicating page ${this.id}`);
+    // Example: Emit an event or directly interact with the PDF document
+    this.eventBus.dispatch("duplicatepage", { pageNumber: this.id });
+  }
+
+  /**
+   * Download the current page as a PDF or image.
+   */
+  downloadPage() {
+    // Implement the logic to download the page
+    console.log(`Downloading page ${this.id}`);
+    // Example: Use pdfPage.render to generate a downloadable file
+    if (this.pdfPage) {
+      const viewport = this.pdfPage.getViewport({ scale: 2 });
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+
+      const renderContext = {
+        canvasContext: context,
+        viewport: viewport,
+      };
+
+      this.pdfPage.render(renderContext).promise.then(() => {
+        canvas.toBlob((blob) => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `page-${this.id}.png`;
+          a.click();
+          URL.revokeObjectURL(url);
+        });
+      });
+    }
+  }
+
+  /**
+   * Refresh the thumbnail image.
+   */
+  refreshThumbnail() {
+    // Implement the logic to refresh the thumbnail
+    console.log(`Refreshing thumbnail for page ${this.id}`);
+    this.reset();
+    this.draw();
   }
 }
 

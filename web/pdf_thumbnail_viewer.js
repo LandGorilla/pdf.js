@@ -63,6 +63,7 @@ class PDFThumbnailViewer {
     pageColors,
     abortSignal,
     enableHWA,
+    documentsResponse
   }) {
     this.container = container;
     this.eventBus = eventBus;
@@ -70,13 +71,31 @@ class PDFThumbnailViewer {
     this.renderingQueue = renderingQueue;
     this.pageColors = pageColors || null;
     this.enableHWA = enableHWA || false;
-
+    this.documentsResponse = documentsResponse;
+    this._documentsData = this.initializeDocuments(documentsResponse);
     this.scroll = watchScroll(
       this.container,
       this.#scrollUpdated.bind(this),
       abortSignal
     );
     this.#resetView();
+  }
+
+  initializeDocuments(documents) {
+    const docs = documents.map((doc, docIndex) => ({
+      ...doc,
+      id: `doc-${docIndex}`, // Unique ID for the document
+      pages: doc.pages.map((pageNumber, pageIndex) => ({
+        pageNumber,
+        id: `doc-${docIndex}-page-${pageIndex}`, // Unique ID for each page
+      })),
+    }));
+    return docs;
+  }
+
+  setDocumentsData(documentsData) {
+    this._documentsData = documentsData;
+    this.#renderDocuments();
   }
 
   #scrollUpdated() {
@@ -98,41 +117,37 @@ class PDFThumbnailViewer {
     if (!this.pdfDocument) {
       return;
     }
-    const thumbnailView = this._thumbnails[pageNumber - 1];
-
+    const thumbnailView = this._thumbnails.find(
+      (thumb) => thumb.id === pageNumber
+    );
+  
     if (!thumbnailView) {
       console.error('scrollThumbnailIntoView: Invalid "pageNumber" parameter.');
       return;
     }
-
-    if (pageNumber !== this._currentPageNumber) {
-      const prevThumbnailView = this._thumbnails[this._currentPageNumber - 1];
-      // Remove the highlight from the previous thumbnail...
-      prevThumbnailView.div.classList.remove(THUMBNAIL_SELECTED_CLASS);
-      // ... and add the highlight to the new thumbnail.
-      thumbnailView.div.classList.add(THUMBNAIL_SELECTED_CLASS);
+  
+    // Find the .document-container ancestor of thumbnailView.div
+    const docContainer = thumbnailView.div.closest('.document-container');
+  
+    if (!docContainer) {
+      console.error(
+        'scrollThumbnailIntoView: Unable to find document container for page number:',
+        pageNumber
+      );
+      return;
     }
-    const { first, last, views } = this.#getVisibleThumbs();
-
-    // If the thumbnail isn't currently visible, scroll it into view.
-    if (views.length > 0) {
-      let shouldScroll = false;
-      if (pageNumber <= first.id || pageNumber >= last.id) {
-        shouldScroll = true;
-      } else {
-        for (const { id, percent } of views) {
-          if (id !== pageNumber) {
-            continue;
-          }
-          shouldScroll = percent < 100;
-          break;
-        }
-      }
-      if (shouldScroll) {
-        scrollIntoView(thumbnailView.div, { top: THUMBNAIL_SCROLL_MARGIN });
-      }
+  
+    // Optionally, handle highlighting of the document container
+    if (this._currentDocumentContainer) {
+      this._currentDocumentContainer.classList.remove('selected-document-container');
     }
-
+    docContainer.classList.add('selected-document-container');
+    this._currentDocumentContainer = docContainer;
+  
+    // Scroll the document container into view
+    scrollIntoView(docContainer, { top: THUMBNAIL_SCROLL_MARGIN });
+  
+    // Update the current page number
     this._currentPageNumber = pageNumber;
   }
 
@@ -172,7 +187,7 @@ class PDFThumbnailViewer {
     this._currentPageNumber = 1;
     this._pageLabels = null;
     this._pagesRotation = 0;
-
+  
     // Remove the thumbnails from the DOM.
     this.container.textContent = "";
   }
@@ -197,31 +212,10 @@ class PDFThumbnailViewer {
 
     firstPagePromise
       .then(firstPdfPage => {
-        const pagesCount = pdfDocument.numPages;
         const viewport = firstPdfPage.getViewport({ scale: 1 });
-
-        for (let pageNum = 1; pageNum <= pagesCount; ++pageNum) {
-          const thumbnail = new PDFThumbnailView({
-            container: this.container,
-            eventBus: this.eventBus,
-            id: pageNum,
-            defaultViewport: viewport.clone(),
-            optionalContentConfigPromise,
-            linkService: this.linkService,
-            renderingQueue: this.renderingQueue,
-            pageColors: this.pageColors,
-            enableHWA: this.enableHWA,
-          });
-          this._thumbnails.push(thumbnail);
-        }
-        // Set the first `pdfPage` immediately, since it's already loaded,
-        // rather than having to repeat the `PDFDocumentProxy.getPage` call in
-        // the `this.#ensurePdfPageLoaded` method before rendering can start.
-        this._thumbnails[0]?.setPdfPage(firstPdfPage);
-
-        // Ensure that the current thumbnail is always highlighted on load.
-        const thumbnailView = this._thumbnails[this._currentPageNumber - 1];
-        thumbnailView.div.classList.add(THUMBNAIL_SELECTED_CLASS);
+        this._defaultViewport = viewport;
+        this.#renderDocuments();
+        this.scrollThumbnailIntoView(1);
       })
       .catch(reason => {
         console.error("Unable to initialize thumbnail viewer", reason);
@@ -301,6 +295,157 @@ class PDFThumbnailViewer {
       return true;
     }
     return false;
+  }
+
+  #renderDocuments() {
+    // Clear existing thumbnails and containers
+    this._thumbnails = [];
+    this.container.textContent = "";
+  
+    const promises = [];
+  
+    for (const doc of this._documentsData) {
+      // Create a container for the document
+      const docContainer = document.createElement("div");
+      docContainer.classList.add("document-container");
+      docContainer.id = doc.id; // Use the updated document ID
+  
+      // Create a form container (optional)
+      const formContainer = document.createElement("div");
+      formContainer.classList.add("form-container");
+  
+      // Create label and text input for File Name
+      const fileNameLabel = document.createElement("label");
+      fileNameLabel.textContent = "File Name:";
+      fileNameLabel.htmlFor = `file-name-${doc.id}`;
+      fileNameLabel.style.display = "block"; // Add display block for styling
+  
+      const fileNameInput = document.createElement("input");
+      fileNameInput.type = "text";
+      fileNameInput.id = `file-name-${doc.id}`;
+      fileNameInput.value = doc.document || ''; // Use existing file name if available
+      fileNameInput.style.width = "200px"; // Adjust width as needed
+  
+      // Append label and input to the form container
+      formContainer.appendChild(fileNameLabel);
+      formContainer.appendChild(fileNameInput);
+  
+      // Create label and dropdown for Document Type
+      const docTypeLabel = document.createElement("label");
+      docTypeLabel.textContent = "Document Type:";
+      docTypeLabel.htmlFor = `doc-type-${doc.id}`;
+      docTypeLabel.style.display = "block"; // Add display block for styling
+      docTypeLabel.style.marginTop = "10px"; // Add margin for spacing
+  
+      const docTypeSelect = document.createElement("select");
+      docTypeSelect.id = `doc-type-${doc.id}`;
+      docTypeSelect.style.width = "200px"; // Adjust width as needed
+  
+      // Add options to the select element (you can customize these)
+      const docTypes = ['Invoice', 'Receipt', 'Report', 'Contract']; // Example document types
+      for (const type of docTypes) {
+        const option = document.createElement("option");
+        option.value = type;
+        option.textContent = type;
+        docTypeSelect.appendChild(option);
+      }
+  
+      // Set the selected value if available
+      if (doc.documentType) {
+        docTypeSelect.value = doc.documentType;
+      }
+  
+      // Append label and select to the form container
+      formContainer.appendChild(docTypeLabel);
+      formContainer.appendChild(docTypeSelect);
+  
+      // Append the form container to the document container
+      docContainer.appendChild(formContainer);
+  
+      // Create a container for the thumbnails
+      const thumbnailsContainer = document.createElement("div");
+      thumbnailsContainer.classList.add("thumbnails-container");
+      thumbnailsContainer.style.display = "flex";
+      thumbnailsContainer.style.flexWrap = "wrap";
+      thumbnailsContainer.style.gap = "10px";
+      thumbnailsContainer.style.marginTop = "15px"; // Add margin for spacing
+      docContainer.appendChild(thumbnailsContainer);
+  
+      // For each page, create a thumbnail
+      for (const pageObj of doc.pages) {
+        const pageNumber = pageObj.pageNumber;
+        const thumbnail = new PDFThumbnailView({
+          container: thumbnailsContainer,
+          eventBus: this.eventBus,
+          id: pageNumber,
+          defaultViewport: this._defaultViewport.clone(),
+          linkService: this.linkService,
+          renderingQueue: this.renderingQueue,
+          pageColors: this.pageColors,
+          enableHWA: this.enableHWA,
+        });
+  
+        this._thumbnails.push(thumbnail);
+  
+        // Ensure the pdfPage is loaded and set it to the thumbnail
+        const promise = this.pdfDocument.getPage(pageNumber).then((pdfPage) => {
+          thumbnail.setPdfPage(pdfPage);
+        });
+  
+        promises.push(promise);
+      }
+  
+      this.container.appendChild(docContainer);
+  
+      // Make the thumbnails container sortable
+      window.Sortable.create(thumbnailsContainer, {
+        group: "thumbnails",
+        animation: 150,
+        onEnd: (evt) => {
+          // Handle the drag and drop event
+          this.#onThumbnailDrop(evt);
+        },
+      });
+    }
+  
+    // Wait for all pdfPages to be loaded
+    Promise.all(promises).then(() => {
+      this.renderingQueue.renderHighestPriority();
+      // Dispatch an event indicating thumbnails are ready
+      this.eventBus.dispatch('thumbnailsready', { source: this });
+    });
+  }
+  
+  #onThumbnailDrop(evt) {
+    const { item, from, to, oldIndex, newIndex } = evt;
+  
+    // Update the documentsData accordingly
+    const fromDocId = from.parentNode.id; // e.g., 'doc-1'
+    const toDocId = to.parentNode.id;
+  
+    const fromDocIndex = this._documentsData.findIndex(
+      (doc) => `doc-${doc.id}` === fromDocId
+    );
+    const toDocIndex = this._documentsData.findIndex(
+      (doc) => `doc-${doc.id}` === toDocId
+    );
+  
+    const fromDoc = this._documentsData[fromDocIndex];
+    const toDoc = this._documentsData[toDocIndex];
+  
+    // Remove the page from the source document
+    const [movedPage] = fromDoc.pages.splice(oldIndex, 1);
+  
+    // Insert the page into the destination document
+    toDoc.pages.splice(newIndex, 0, movedPage);
+  
+    // Update the thumbnail's container
+    item.parentNode.removeChild(item);
+    to.insertBefore(item, to.children[newIndex]);
+  
+    // Optionally, update the thumbnails array if needed
+    // In this case, the thumbnails remain the same objects
+    // But you may want to re-render or update states
   }
 }
 

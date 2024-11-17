@@ -491,6 +491,28 @@ const PDFViewerApplication = {
     pdfScriptingManager.setViewer(pdfViewer);
 
     if (appConfig.sidebar?.thumbnailView) {
+      const documentsResponse = [
+        {
+            "document": "Progress Billing",
+            "pages": [1, 2, 3]
+        },
+        {
+            "document": "Unconditional Waiver and Release Upon Progress Payment",
+            "pages": [4]
+        },
+        {
+            "document": "Conditional Waiver and Release Upon Progress Payment",
+            "pages": [5]
+        },
+        {
+            "document": "Job Cost Summary",
+            "pages": [6, 7, 8, 9, 10, 11]
+        },
+        {
+            "document": "Unconditional Waiver and Release on Progress Payment",
+            "pages": [12, 13, 14]
+        }
+      ];
       this.pdfThumbnailViewer = new PDFThumbnailViewer({
         container: appConfig.sidebar.thumbnailView,
         eventBus,
@@ -499,6 +521,7 @@ const PDFViewerApplication = {
         pageColors,
         abortSignal: this._globalAbortController.signal,
         enableHWA,
+        documentsResponse
       });
       pdfRenderingQueue.setThumbnailViewer(this.pdfThumbnailViewer);
     }

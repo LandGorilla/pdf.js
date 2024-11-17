@@ -22,7 +22,7 @@
   --inline-end: right;
   /*#endif*/
 
-  --sidebar-width: 200px;
+  --sidebar-width: 245px;
   --sidebar-transition-duration: 200ms;
   --sidebar-transition-timing-function: ease;
 
@@ -129,6 +129,11 @@
   );
   --secondaryToolbarButton-documentProperties-icon: url(images/secondaryToolbarButton-documentProperties.svg);
   --editorParams-stampAddImage-icon: url(images/toolbarButton-zoomIn.svg);
+
+  --action-copy-icon: url(images/action-copy.png);
+  --action-download-icon: url(images/action-download.png);
+  --action-rotate-icon: url(images/action-rotate.png);
+  --action-trash-icon: url(images/action-trash.png);
 }
 
 :root:dir(rtl) {
@@ -294,7 +299,7 @@ body {
 
 #sidebarContainer {
   position: absolute;
-  inset-block: var(--toolbar-height) 0;
+  inset-block: 0 0;
   inset-inline-start: calc(-1 * var(--sidebar-width));
   width: var(--sidebar-width);
   visibility: hidden;
@@ -365,8 +370,9 @@ body {
   background-color: var(--sidebar-toolbar-bg-color);
   box-shadow: var(--toolbarSidebar-box-shadow);
   border-bottom: var(--toolbarSidebar-border-bottom);
-  padding: var(--toolbar-vertical-padding) var(--toolbar-horizontal-padding);
+  padding: 0 0;
   justify-content: space-between;
+  display: none !important;
 
   #toolbarSidebarLeft {
     width: auto;
@@ -732,7 +738,8 @@ body {
 }
 
 #thumbnailView {
-  width: calc(100% - 60px);
+  /* width: calc(100% - 60px); */
+  box-sizing: border-box;
   padding: 10px 30px 0;
 }
 
@@ -746,6 +753,7 @@ body {
   --thumbnail-width: 0;
   --thumbnail-height: 0;
 
+  position: relative;
   float: var(--inline-start);
   width: var(--thumbnail-width);
   height: var(--thumbnail-height);
@@ -1752,4 +1760,109 @@ dialog :link {
   #scaleSelectContainer {
     display: none;
   }
+}
+
+.document-container {
+  /* Ensure the container can expand */
+  width: 100%;
+}
+
+.thumbnails-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  height: auto;
+  overflow: visible;
+}
+
+.actions {
+  position: absolute; /* Position relative to .thumbnail */
+  bottom: 0px;        /* Adjust as needed */
+}
+
+.action-button {
+  background: rgba(0, 0, 0, 0.8);
+  border: none;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+/* .action-button img {
+  width: 100%; 
+  height: 100%;
+  object-fit: contain;
+} */
+
+.action-button:hover {
+  background: rgba(255, 255, 255, 1);
+}
+
+.action-button:focus {
+  outline: 2px solid #007BFF;
+  outline-offset: 2px;
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  text-align: center;
+  line-height: 16px;
+  font-size: 16px;
+}
+
+.trash-icon::before {
+  mask-image: var(--action-trash-icon);
+}
+
+.copy-icon::before {
+  mask-image: var(--action-copy-icon);
+}
+
+.download-icon::before {
+  mask-image: var(--action-download-icon);
+}
+
+.rotate-icon::before {
+  mask-image: var(--action-rotate-icon);
+}
+
+#editorModeButtons {
+  display: none;
+}
+
+/* Styles for the form container */
+.form-container {
+  margin-bottom: 10px;
+  width: 165px;
+  display: flex;
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
+/* Styles for labels */
+.form-container label {
+  display: block;
+  color: white;
+  font-weight: bold;
+  margin-top: 10px;
+  font-size: 12px;
+  width: 100%;
+}
+
+/* Styles for input fields and select elements */
+.form-container input,
+.form-container select {
+  width: 100%;
+  background-color: #333;
+  color: white;
+  border: 1px solid #555;
+  padding: 5px;
+  margin-top: 5px;
+  font-size: 12px !important;
+}
+
+/* Style for placeholder text in inputs */
+.form-container input::placeholder {
+  color: #ccc;              /* Lighter color for placeholders */
 }

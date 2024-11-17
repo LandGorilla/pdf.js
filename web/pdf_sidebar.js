@@ -25,7 +25,7 @@ import {
 } from "./ui_utils.js";
 
 const SIDEBAR_WIDTH_VAR = "--sidebar-width";
-const SIDEBAR_MIN_WIDTH = 200; // pixels
+const SIDEBAR_MIN_WIDTH = 245; // pixels
 const SIDEBAR_RESIZING_CLASS = "sidebarResizing";
 const UI_NOTIFICATION_CLASS = "pdfSidebarNotification";
 
