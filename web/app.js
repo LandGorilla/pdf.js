@@ -2022,6 +2022,29 @@ const PDFViewerApplication = {
         opts
       );
     }
+
+    const resizeObserver = new ResizeObserver(entries => {
+      for (let entry of entries) {
+        const controlBar = document.getElementById('control-bar');
+        const sidebarContainer = document.getElementById('sidebarContainer');
+        controlBar.style.setProperty('--control-bar-offset-left', `-${sidebarContainer.offsetWidth-10}px`);
+      }
+    });
+    const sidebarContainer = document.getElementById('sidebarContainer');
+    resizeObserver.observe(sidebarContainer);
+
+    document.getElementById("previous-page-button").addEventListener("click", function () {
+      pdfViewer.previousPage();
+    });
+
+    document.getElementById("next-page-button").addEventListener("click", function () {
+      pdfViewer.nextPage();
+    });
+
+    document.getElementById("zoom-out-button").addEventListener("click", this.zoomOut.bind(this));
+    document.getElementById("zoom-in-button").addEventListener("click", this.zoomIn.bind(this));
+    document.getElementById("print-button").addEventListener("click", this.triggerPrinting.bind(this));
+    document.getElementById("download-button").addEventListener("click", this.downloadOrSave.bind(this));
   },
 
   bindWindowEvents() {

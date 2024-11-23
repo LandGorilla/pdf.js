@@ -46,6 +46,7 @@ class PDFThumbnailView {
     container,
     eventBus,
     id,
+    pageNumber,
     defaultViewport,
     optionalContentConfigPromise,
     linkService,
@@ -54,6 +55,7 @@ class PDFThumbnailView {
     enableHWA,
   }) {
     this.id = id;
+    this.pageNumber = pageNumber;
     this.renderingId = "thumbnail" + id;
     this.pageLabel = null;
 
@@ -65,6 +67,7 @@ class PDFThumbnailView {
     this.pageColors = pageColors || null;
     this.enableHWA = enableHWA || false;
 
+    this.container = container;
     this.eventBus = eventBus;
     this.linkService = linkService;
     this.renderingQueue = renderingQueue;
@@ -452,82 +455,20 @@ class PDFThumbnailView {
   handleActionButtonClick(action) {
     switch (action) {
       case "trash-icon":
-        this.deletePage();
+        this.eventBus.dispatch("thumbnail-delete", { source: this, id: this.id });
         break;
-      case "duplicate-icon":
-        this.duplicatePage();
+      case "copy-icon":
+        this.eventBus.dispatch("thumbnail-copy", { source: this, id: this.id });
         break;
       case "download-icon":
-        this.downloadPage();
+        this.eventBus.dispatch("thumbnail-download", { source: this, id: this.id });
         break;
-      case "refresh-icon":
-        this.refreshThumbnail();
+      case "rotate-icon":
+        this.eventBus.dispatch("thumbnail-rotate", { source: this, id: this.id });
         break;
       default:
         console.warn(`Unhandled action: ${action}`);
     }
-  }
-
-  /**
-   * Delete the current page.
-   */
-  deletePage() {
-    // Implement the logic to delete the page
-    console.log(`Deleting page ${this.id}`);
-    // Example: Emit an event or directly interact with the PDF document
-    this.eventBus.dispatch("deletepage", { pageNumber: this.id });
-  }
-
-  /**
-   * Duplicate the current page.
-   */
-  duplicatePage() {
-    // Implement the logic to duplicate the page
-    console.log(`Duplicating page ${this.id}`);
-    // Example: Emit an event or directly interact with the PDF document
-    this.eventBus.dispatch("duplicatepage", { pageNumber: this.id });
-  }
-
-  /**
-   * Download the current page as a PDF or image.
-   */
-  downloadPage() {
-    // Implement the logic to download the page
-    console.log(`Downloading page ${this.id}`);
-    // Example: Use pdfPage.render to generate a downloadable file
-    if (this.pdfPage) {
-      const viewport = this.pdfPage.getViewport({ scale: 2 });
-      const canvas = document.createElement("canvas");
-      const context = canvas.getContext("2d");
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-
-      const renderContext = {
-        canvasContext: context,
-        viewport: viewport,
-      };
-
-      this.pdfPage.render(renderContext).promise.then(() => {
-        canvas.toBlob((blob) => {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `page-${this.id}.png`;
-          a.click();
-          URL.revokeObjectURL(url);
-        });
-      });
-    }
-  }
-
-  /**
-   * Refresh the thumbnail image.
-   */
-  refreshThumbnail() {
-    // Implement the logic to refresh the thumbnail
-    console.log(`Refreshing thumbnail for page ${this.id}`);
-    this.reset();
-    this.draw();
   }
 }
 

@@ -20,6 +20,10 @@
 // eslint-disable-next-line max-len
 /** @typedef {import("./pdf_rendering_queue").PDFRenderingQueue} PDFRenderingQueue */
 
+// PDFThumbnailViewer.js
+
+import Sortable from 'https://cdn.jsdelivr.net/npm/sortablejs/modular/sortable.esm.js';
+import { PDFDocument } from 'https://cdn.jsdelivr.net/npm/pdf-lib/+esm';
 import {
   getVisibleElements,
   isValidRotation,
@@ -46,6 +50,7 @@ const THUMBNAIL_SELECTED_CLASS = "selected";
  *   events.
  * @property {boolean} [enableHWA] - Enables hardware acceleration for
  *   rendering. The default value is `false`.
+ * @property {Array} [documentsResponse] - The initial documents data.
  */
 
 /**
@@ -63,7 +68,7 @@ class PDFThumbnailViewer {
     pageColors,
     abortSignal,
     enableHWA,
-    documentsResponse
+    documentsResponse,
   }) {
     this.container = container;
     this.eventBus = eventBus;
@@ -79,6 +84,9 @@ class PDFThumbnailViewer {
       abortSignal
     );
     this.#resetView();
+
+    this.eventBus._on('thumbnail-delete', this.#onDeleteThumbnail.bind(this));
+    this.eventBus._on('thumbnail-download', this.#onDownloadPage.bind(this));
   }
 
   initializeDocuments(documents) {
@@ -86,7 +94,7 @@ class PDFThumbnailViewer {
       ...doc,
       id: `doc-${docIndex}`, // Unique ID for the document
       pages: doc.pages.map((pageNumber, pageIndex) => ({
-        pageNumber,
+        pageNumber, // Use the actual page number
         id: `doc-${docIndex}-page-${pageIndex}`, // Unique ID for each page
       })),
     }));
@@ -117,18 +125,19 @@ class PDFThumbnailViewer {
     if (!this.pdfDocument) {
       return;
     }
+    
     const thumbnailView = this._thumbnails.find(
-      (thumb) => thumb.id === pageNumber
+      (thumb) => thumb.pageNumber === pageNumber
     );
-  
+
     if (!thumbnailView) {
       console.error('scrollThumbnailIntoView: Invalid "pageNumber" parameter.');
       return;
     }
-  
+
     // Find the .document-container ancestor of thumbnailView.div
     const docContainer = thumbnailView.div.closest('.document-container');
-  
+
     if (!docContainer) {
       console.error(
         'scrollThumbnailIntoView: Unable to find document container for page number:',
@@ -136,17 +145,19 @@ class PDFThumbnailViewer {
       );
       return;
     }
-  
+
     // Optionally, handle highlighting of the document container
     if (this._currentDocumentContainer) {
-      this._currentDocumentContainer.classList.remove('selected-document-container');
+      this._currentDocumentContainer.classList.remove(
+        'selected-document-container'
+      );
     }
     docContainer.classList.add('selected-document-container');
     this._currentDocumentContainer = docContainer;
-  
+
     // Scroll the document container into view
     scrollIntoView(docContainer, { top: THUMBNAIL_SCROLL_MARGIN });
-  
+
     // Update the current page number
     this._currentPageNumber = pageNumber;
   }
@@ -157,7 +168,7 @@ class PDFThumbnailViewer {
 
   set pagesRotation(rotation) {
     if (!isValidRotation(rotation)) {
-      throw new Error("Invalid thumbnails rotation angle.");
+      throw new Error('Invalid thumbnails rotation angle.');
     }
     if (!this.pdfDocument) {
       return;
@@ -187,9 +198,9 @@ class PDFThumbnailViewer {
     this._currentPageNumber = 1;
     this._pageLabels = null;
     this._pagesRotation = 0;
-  
+
     // Remove the thumbnails from the DOM.
-    this.container.textContent = "";
+    this.container.textContent = '';
   }
 
   /**
@@ -206,19 +217,16 @@ class PDFThumbnailViewer {
       return;
     }
     const firstPagePromise = pdfDocument.getPage(1);
-    const optionalContentConfigPromise = pdfDocument.getOptionalContentConfig({
-      intent: "display",
-    });
 
     firstPagePromise
-      .then(firstPdfPage => {
+      .then((firstPdfPage) => {
         const viewport = firstPdfPage.getViewport({ scale: 1 });
         this._defaultViewport = viewport;
         this.#renderDocuments();
         this.scrollThumbnailIntoView(1);
       })
-      .catch(reason => {
-        console.error("Unable to initialize thumbnail viewer", reason);
+      .catch((reason) => {
+        console.error('Unable to initialize thumbnail viewer', reason);
       });
   }
 
@@ -241,7 +249,7 @@ class PDFThumbnailViewer {
       !(Array.isArray(labels) && this.pdfDocument.numPages === labels.length)
     ) {
       this._pageLabels = null;
-      console.error("PDFThumbnailViewer_setPageLabels: Invalid page labels.");
+      console.error('PDFThumbnailViewer_setPageLabels: Invalid page labels.');
     } else {
       this._pageLabels = labels;
     }
@@ -260,13 +268,13 @@ class PDFThumbnailViewer {
       return thumbView.pdfPage;
     }
     try {
-      const pdfPage = await this.pdfDocument.getPage(thumbView.id);
+      const pdfPage = await this.pdfDocument.getPage(thumbView.pageNumber);
       if (!thumbView.pdfPage) {
         thumbView.setPdfPage(pdfPage);
       }
       return pdfPage;
     } catch (reason) {
-      console.error("Unable to get page for thumb view", reason);
+      console.error('Unable to get page for thumb view', reason);
       return null; // Page error -- there is nothing that can be done.
     }
   }
@@ -300,114 +308,119 @@ class PDFThumbnailViewer {
   #renderDocuments() {
     // Clear existing thumbnails and containers
     this._thumbnails = [];
-    this.container.textContent = "";
-  
+    this.container.textContent = '';
+
     const promises = [];
-  
+
     for (const doc of this._documentsData) {
       // Create a container for the document
-      const docContainer = document.createElement("div");
-      docContainer.classList.add("document-container");
+      const docContainer = document.createElement('div');
+      docContainer.classList.add('document-container');
       docContainer.id = doc.id; // Use the updated document ID
-  
+
       // Create a form container (optional)
-      const formContainer = document.createElement("div");
-      formContainer.classList.add("form-container");
-  
+      const formContainer = document.createElement('div');
+      formContainer.classList.add('form-container');
+
       // Create label and text input for File Name
-      const fileNameLabel = document.createElement("label");
-      fileNameLabel.textContent = "File Name:";
+      const fileNameLabel = document.createElement('label');
+      fileNameLabel.textContent = 'File Name:';
       fileNameLabel.htmlFor = `file-name-${doc.id}`;
-      fileNameLabel.style.display = "block"; // Add display block for styling
-  
-      const fileNameInput = document.createElement("input");
-      fileNameInput.type = "text";
+      fileNameLabel.style.display = 'block'; // Add display block for styling
+
+      const fileNameInput = document.createElement('input');
+      fileNameInput.type = 'text';
       fileNameInput.id = `file-name-${doc.id}`;
       fileNameInput.value = doc.document || ''; // Use existing file name if available
-      fileNameInput.style.width = "200px"; // Adjust width as needed
-  
+      fileNameInput.style.width = '200px'; // Adjust width as needed
+
       // Append label and input to the form container
       formContainer.appendChild(fileNameLabel);
       formContainer.appendChild(fileNameInput);
-  
+
       // Create label and dropdown for Document Type
-      const docTypeLabel = document.createElement("label");
-      docTypeLabel.textContent = "Document Type:";
+      const docTypeLabel = document.createElement('label');
+      docTypeLabel.textContent = 'Document Type:';
       docTypeLabel.htmlFor = `doc-type-${doc.id}`;
-      docTypeLabel.style.display = "block"; // Add display block for styling
-      docTypeLabel.style.marginTop = "10px"; // Add margin for spacing
-  
-      const docTypeSelect = document.createElement("select");
+      docTypeLabel.style.display = 'block'; // Add display block for styling
+      docTypeLabel.style.marginTop = '10px'; // Add margin for spacing
+
+      const docTypeSelect = document.createElement('select');
       docTypeSelect.id = `doc-type-${doc.id}`;
-      docTypeSelect.style.width = "200px"; // Adjust width as needed
-  
+      docTypeSelect.style.width = '200px'; // Adjust width as needed
+
       // Add options to the select element (you can customize these)
       const docTypes = ['Invoice', 'Receipt', 'Report', 'Contract']; // Example document types
       for (const type of docTypes) {
-        const option = document.createElement("option");
+        const option = document.createElement('option');
         option.value = type;
         option.textContent = type;
         docTypeSelect.appendChild(option);
       }
-  
+
       // Set the selected value if available
       if (doc.documentType) {
         docTypeSelect.value = doc.documentType;
       }
-  
+
       // Append label and select to the form container
       formContainer.appendChild(docTypeLabel);
       formContainer.appendChild(docTypeSelect);
-  
+
       // Append the form container to the document container
       docContainer.appendChild(formContainer);
-  
+
       // Create a container for the thumbnails
-      const thumbnailsContainer = document.createElement("div");
-      thumbnailsContainer.classList.add("thumbnails-container");
-      thumbnailsContainer.style.display = "flex";
-      thumbnailsContainer.style.flexWrap = "wrap";
-      thumbnailsContainer.style.gap = "10px";
-      thumbnailsContainer.style.marginTop = "15px"; // Add margin for spacing
+      const thumbnailsContainer = document.createElement('div');
+      thumbnailsContainer.classList.add('thumbnails-container');
+      thumbnailsContainer.style.display = 'flex';
+      thumbnailsContainer.style.flexWrap = 'wrap';
+      thumbnailsContainer.style.gap = '10px';
+      thumbnailsContainer.style.marginTop = '15px'; // Add margin for spacing
       docContainer.appendChild(thumbnailsContainer);
-  
+
       // For each page, create a thumbnail
       for (const pageObj of doc.pages) {
-        const pageNumber = pageObj.pageNumber;
+        const pageId = pageObj.id; // Unique page ID
+        const pageNumber = pageObj.pageNumber; // Unique global page number
+
         const thumbnail = new PDFThumbnailView({
           container: thumbnailsContainer,
           eventBus: this.eventBus,
-          id: pageNumber,
+          id: pageId, 
+          pageNumber: pageNumber,
           defaultViewport: this._defaultViewport.clone(),
           linkService: this.linkService,
           renderingQueue: this.renderingQueue,
           pageColors: this.pageColors,
           enableHWA: this.enableHWA,
         });
-  
+
         this._thumbnails.push(thumbnail);
-  
+
         // Ensure the pdfPage is loaded and set it to the thumbnail
         const promise = this.pdfDocument.getPage(pageNumber).then((pdfPage) => {
           thumbnail.setPdfPage(pdfPage);
         });
-  
+
         promises.push(promise);
       }
-  
+
       this.container.appendChild(docContainer);
-  
+
       // Make the thumbnails container sortable
-      window.Sortable.create(thumbnailsContainer, {
-        group: "thumbnails",
+      Sortable.create(thumbnailsContainer, {
+        group: 'shared', // Allow dragging between containers
         animation: 150,
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
         onEnd: (evt) => {
           // Handle the drag and drop event
           this.#onThumbnailDrop(evt);
         },
       });
     }
-  
+
     // Wait for all pdfPages to be loaded
     Promise.all(promises).then(() => {
       this.renderingQueue.renderHighestPriority();
@@ -415,37 +428,204 @@ class PDFThumbnailViewer {
       this.eventBus.dispatch('thumbnailsready', { source: this });
     });
   }
-  
+
+  #onDeleteThumbnail(evt) {
+    const { source, id } = evt;
+    const thumbnail = source;
+
+    // Remove the thumbnail's DOM element
+    thumbnail.div.remove();
+
+    // Remove the thumbnail from the _thumbnails array
+    const thumbIndex = this._thumbnails.indexOf(thumbnail);
+    if (thumbIndex !== -1) {
+      this._thumbnails.splice(thumbIndex, 1);
+    }
+
+    // Remove the page from _documentsData
+    for (const doc of this._documentsData) {
+      const pageIndex = doc.pages.findIndex((page) => page.id === thumbnail.id);
+      if (pageIndex !== -1) {
+        doc.pages.splice(pageIndex, 1);
+
+        // Handle empty documents
+        if (doc.pages.length === 0) {
+          const docContainer = thumbnail.div.closest('.document-container');
+          if (docContainer) {
+            docContainer.remove();
+          }
+          const docIndex = this._documentsData.indexOf(doc);
+          if (docIndex !== -1) {
+            this._documentsData.splice(docIndex, 1);
+          }
+        }
+        break;
+      }
+    }
+
+    // Update page numbers
+    this.#updatePageNumbers();
+
+    // Re-render if necessary
+    this.renderingQueue.renderHighestPriority();
+  }
+
+  async #onDownloadPage(evt) {
+    const { source, id } = evt;
+    const pageNumber = source.pageNumber;
+    try {
+      const originalPdfBytes = await this.pdfDocument.getData();
+      const originalPdf = await PDFDocument.load(originalPdfBytes);
+      const pdfDoc = await PDFDocument.create();
+
+      // Copy the specified page into the new PDF
+      const [copiedPage] = await pdfDoc.copyPages(originalPdf, [pageNumber - 1]);
+      pdfDoc.addPage(copiedPage);
+
+      const pdfBytes = await pdfDoc.save();
+
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `page-${pageNumber}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading page as PDF:', error);
+    }
+  }
+
   #onThumbnailDrop(evt) {
     const { item, from, to, oldIndex, newIndex } = evt;
-  
-    // Update the documentsData accordingly
-    const fromDocId = from.parentNode.id; // e.g., 'doc-1'
-    const toDocId = to.parentNode.id;
-  
+
+    // Get the source and destination document containers
+    const fromDocContainer = from.closest('.document-container');
+    const toDocContainer = to.closest('.document-container');
+
+    const fromDocId = fromDocContainer.id;
+    const toDocId = toDocContainer.id;
+
     const fromDocIndex = this._documentsData.findIndex(
-      (doc) => `doc-${doc.id}` === fromDocId
+      (doc) => doc.id === fromDocId
     );
     const toDocIndex = this._documentsData.findIndex(
-      (doc) => `doc-${doc.id}` === toDocId
+      (doc) => doc.id === toDocId
     );
-  
+
     const fromDoc = this._documentsData[fromDocIndex];
     const toDoc = this._documentsData[toDocIndex];
-  
+
     // Remove the page from the source document
     const [movedPage] = fromDoc.pages.splice(oldIndex, 1);
-  
+
     // Insert the page into the destination document
     toDoc.pages.splice(newIndex, 0, movedPage);
+
+    // Update the _thumbnails array
+    const movedThumbnailIndex = this._thumbnails.findIndex(
+      (thumb) => thumb.id === movedPage.id
+    );
+    const [movedThumbnail] = this._thumbnails.splice(movedThumbnailIndex, 1);
+
+    // Find the insertion index in _thumbnails
+    const toDocThumbnails = this._thumbnails.filter(
+      (thumb) =>
+        thumb.container.closest('.document-container').id === toDocId
+    );
+
+    let insertIndex;
+    if (toDocThumbnails.length === 0) {
+      // If the destination document has no thumbnails yet
+      insertIndex = this._thumbnails.findIndex(
+        (thumb) => thumb.container.closest('.document-container').id === toDocId
+      );
+      if (insertIndex === -1) {
+        insertIndex = this._thumbnails.length;
+      }
+    } else {
+      if (newIndex >= toDocThumbnails.length) {
+        insertIndex =
+          this._thumbnails.indexOf(toDocThumbnails[toDocThumbnails.length - 1]) +
+          1;
+      } else {
+        insertIndex = this._thumbnails.indexOf(toDocThumbnails[newIndex]);
+      }
+    }
+
+    this._thumbnails.splice(insertIndex, 0, movedThumbnail);
+
+    // Reassign page numbers to ensure they are sequential
+    for (const doc of this._documentsData) {
+      for (let i = 0; i < doc.pages.length; i++) {
+        doc.pages[i].pageNumber = doc.pages[i].pageNumber; // Keep original page numbers
+      }
+    }
   
-    // Update the thumbnail's container
-    item.parentNode.removeChild(item);
-    to.insertBefore(item, to.children[newIndex]);
-  
-    // Optionally, update the thumbnails array if needed
-    // In this case, the thumbnails remain the same objects
-    // But you may want to re-render or update states
+    // Update the pageNumber in thumbnails
+    for (const thumbnail of this._thumbnails) {
+      const page = this._documentsData
+        .flatMap((doc) => doc.pages)
+        .find((p) => p.id === thumbnail.id);
+      if (page) {
+        thumbnail.pageNumber = page.pageNumber;
+      }
+    }
+
+    // Optionally, re-render the thumbnails if necessary
+    this.renderingQueue.renderHighestPriority();
+  }
+
+  #updatePageNumbers() {
+    let pageNumber = 1;
+    for (const doc of this._documentsData) {
+      for (const page of doc.pages) {
+        page.pageNumber = pageNumber++;
+      }
+    }
+
+    for (const thumbnail of this._thumbnails) {
+      const page = this._documentsData
+        .flatMap((doc) => doc.pages)
+        .find((p) => p.id === thumbnail.id);
+      if (page) {
+        thumbnail.pageNumber = page.pageNumber;
+      }
+    }
+  }
+
+  /**
+   * Method to generate the modified PDF based on user changes.
+   * This method assumes you have included a PDF manipulation library like PDF-lib.
+   */
+  async generateModifiedPDF() {
+    const pdfDoc = await PDFLib.PDFDocument.create();
+    const originalPdfBytes = await this.pdfDocument.getData();
+    const originalPdf = await PDFLib.PDFDocument.load(originalPdfBytes);
+
+    for (const doc of this._documentsData) {
+      for (const page of doc.pages) {
+        const [copiedPage] = await pdfDoc.copyPages(
+          originalPdf,
+          [page.pageNumber - 1]
+        );
+        pdfDoc.addPage(copiedPage);
+      }
+    }
+
+    const pdfBytes = await pdfDoc.save();
+    // Trigger download or further processing
+    // For example:
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'modified.pdf';
+    a.click();
+    URL.revokeObjectURL(url);
   }
 }
 

@@ -65,5 +65,9 @@
   "engines": {
     "node": ">=20"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "dependencies": {
+    "pdf-lib": "^1.17.1",
+    "sortablejs": "^1.15.3"
+  }
 }
