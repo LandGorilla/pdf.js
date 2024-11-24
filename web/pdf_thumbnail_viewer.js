@@ -36,6 +36,11 @@ import { PDFThumbnailView, TempImageFactory } from "./pdf_thumbnail_view.js";
 const THUMBNAIL_SCROLL_MARGIN = -19;
 const THUMBNAIL_SELECTED_CLASS = "selected";
 
+const ViewType = Object.freeze({
+  NORMAL: 'NORMAL',
+  GROUPED: 'GROUPED',
+});
+
 /**
  * @typedef {Object} PDFThumbnailViewerOptions
  * @property {HTMLDivElement} container - The container for the thumbnail
@@ -78,6 +83,8 @@ class PDFThumbnailViewer {
     this.enableHWA = enableHWA || false;
     this.documentsResponse = documentsResponse;
     this._documentsData = this.initializeDocuments(documentsResponse);
+    this.viewType = ViewType.NORMAL;
+
     this.scroll = watchScroll(
       this.container,
       this.#scrollUpdated.bind(this),
@@ -103,7 +110,7 @@ class PDFThumbnailViewer {
 
   setDocumentsData(documentsData) {
     this._documentsData = documentsData;
-    this.#renderDocuments();
+    this.#renderDocumentContainers();
   }
 
   #scrollUpdated() {
@@ -125,7 +132,57 @@ class PDFThumbnailViewer {
     if (!this.pdfDocument) {
       return;
     }
-    
+
+    switch (this.viewType) {
+      case ViewType.NORMAL:
+        this.#scrollToDocumentPage(pageNumber);
+        break;
+      case ViewType.GROUPED:
+        this.#scrollToDocumentContainer(pageNumber);
+        break;
+    }
+  }
+
+  #scrollToDocumentPage(pageNumber) {
+    const thumbnailView = this._thumbnails[pageNumber - 1];
+
+    if (!thumbnailView) {
+      console.error('scrollThumbnailIntoView: Invalid "pageNumber" parameter.');
+      return;
+    }
+
+    if (pageNumber !== this._currentPageNumber) {
+      const prevThumbnailView = this._thumbnails[this._currentPageNumber - 1];
+      // Remove the highlight from the previous thumbnail...
+      prevThumbnailView.div.classList.remove(THUMBNAIL_SELECTED_CLASS);
+      // ... and add the highlight to the new thumbnail.
+      thumbnailView.div.classList.add(THUMBNAIL_SELECTED_CLASS);
+    }
+    const { first, last, views } = this.#getVisibleThumbs();
+
+    // If the thumbnail isn't currently visible, scroll it into view.
+    if (views.length > 0) {
+      let shouldScroll = false;
+      if (pageNumber <= first.id || pageNumber >= last.id) {
+        shouldScroll = true;
+      } else {
+        for (const { id, percent } of views) {
+          if (id !== pageNumber) {
+            continue;
+          }
+          shouldScroll = percent < 100;
+          break;
+        }
+      }
+      if (shouldScroll) {
+        scrollIntoView(thumbnailView.div, { top: THUMBNAIL_SCROLL_MARGIN });
+      }
+    }
+
+    this._currentPageNumber = pageNumber;
+  }
+
+  #scrollToDocumentContainer(pageNumber) {
     const thumbnailView = this._thumbnails.find(
       (thumb) => thumb.pageNumber === pageNumber
     );
@@ -216,14 +273,25 @@ class PDFThumbnailViewer {
     if (!pdfDocument) {
       return;
     }
+
     const firstPagePromise = pdfDocument.getPage(1);
 
     firstPagePromise
       .then((firstPdfPage) => {
         const viewport = firstPdfPage.getViewport({ scale: 1 });
         this._defaultViewport = viewport;
-        this.#renderDocuments();
-        this.scrollThumbnailIntoView(1);
+
+        switch (this.viewType) {
+          case ViewType.NORMAL:
+            console.log(">> NORMAL");
+            this.#renderDocuments(firstPdfPage, viewport);
+            break;
+          case ViewType.GROUPED:
+            console.log(">> GROUPED");
+            this.#renderDocumentContainers();
+            this.scrollThumbnailIntoView(1);
+            break;
+        }
       })
       .catch((reason) => {
         console.error('Unable to initialize thumbnail viewer', reason);
@@ -305,7 +373,39 @@ class PDFThumbnailViewer {
     return false;
   }
 
-  #renderDocuments() {
+  #renderDocuments(firstPdfPage, viewport) {
+    this._thumbnails = [];
+
+    const optionalContentConfigPromise = this.pdfDocument.getOptionalContentConfig({
+      intent: "display",
+    });
+    const pagesCount = this.pdfDocument.numPages;
+    for (let pageNum = 1; pageNum <= pagesCount; ++pageNum) {
+      const thumbnail = new PDFThumbnailView({
+        container: this.container,
+        eventBus: this.eventBus,
+        id: pageNum,
+        pageNumber: pageNum,
+        defaultViewport: viewport.clone(),
+        optionalContentConfigPromise,
+        linkService: this.linkService,
+        renderingQueue: this.renderingQueue,
+        pageColors: this.pageColors,
+        enableHWA: this.enableHWA,
+      });
+      this._thumbnails.push(thumbnail);
+    }
+    // Set the first `pdfPage` immediately, since it's already loaded,
+    // rather than having to repeat the `PDFDocumentProxy.getPage` call in
+    // the `this.#ensurePdfPageLoaded` method before rendering can start.
+    this._thumbnails[0]?.setPdfPage(firstPdfPage);
+
+    // Ensure that the current thumbnail is always highlighted on load.
+    const thumbnailView = this._thumbnails[this._currentPageNumber - 1];
+    thumbnailView.div.classList.add(THUMBNAIL_SELECTED_CLASS);
+  }
+
+  #renderDocumentContainers() {
     // Clear existing thumbnails and containers
     this._thumbnails = [];
     this.container.textContent = '';
