@@ -99,7 +99,7 @@ See https://github.com/adobe-type-tools/cmap-resources
     <div id="outerContainer">
 
       <div id="sidebarContainer">
-        <div id="toolbarSidebar" class="toolbarHorizontalGroup">
+        <div id="toolbarSidebar" class="toolbarHorizontalGroup" style="display: block;">
           <div id="toolbarSidebarLeft">
             <div id="sidebarViewButtons" class="toolbarHorizontalGroup toggled" role="radiogroup">
               <button id="viewThumbnail" class="toolbarButton toggled" type="button" title="Show Thumbnails" tabindex="0" data-l10n-id="pdfjs-thumbs-button" role="radio" aria-checked="true" aria-controls="thumbnailView">
@@ -128,14 +128,35 @@ See https://github.com/adobe-type-tools/cmap-resources
           </div>
         </div>
         <div id="sidebarContent">
-          <div id="thumbnailView">
+          <div id="sidebar-left-actions">
+            <div id="create-document-container-button" class="button sidebar-left-action">
+              <img src="images/folder-plus.svg" alt="Create Document Container" width="24" height="24">
+            </div>
+            <div id="left-download-button" class="button sidebar-left-action">
+              <img src="images/download.svg" alt="Download" width="24" height="24">
+            </div>
+            <div id="open-sidebar-options" class="button sidebar-left-action dropdown">
+              <img class="dropdown-action" data-target="#dropright" src="images/chevrons-right.svg" alt="Open Options" width="24" height="24">
+              <div class="drop-menu dropright" id="dropright">
+                <div class="dropdown-item has-submenu">
+                  <a href="#">Intelligent Document Processing</a>
+                  <div class="drop-menu submenu">
+                    <a id="search-documents-in-file" href="#">Search for Documents in File</a>
+                    <a href="#">Extract Data from Documents</a>
+                  </div>
+                </div>
+                <a href="#">Delete Selected Document</a>
+                <a href="#">Insert Document Container</a>
+                <a href="#">Download All Documents</a>
+                <a href="#">Download Selected Documents</a>
+                <a href="#">Download Selected to Document Center</a>
+              </div>
+            </div>
           </div>
-          <div id="outlineView" class="hidden">
-          </div>
-          <div id="attachmentsView" class="hidden">
-          </div>
-          <div id="layersView" class="hidden">
-          </div>
+          <div id="thumbnailView"></div>
+          <div id="outlineView" class="hidden"></div>
+          <div id="attachmentsView" class="hidden"></div>
+          <div id="layersView" class="hidden"></div>
         </div>
         <div id="sidebarResizer"></div>
       </div>  <!-- sidebarContainer -->
@@ -719,6 +740,14 @@ See https://github.com/adobe-type-tools/cmap-resources
         <div id="download-button" class="button">
           <img src="images/download.svg" alt="Download" width="24" height="24">
         </div>
+      </div>
+    </div>
+    <div id="modal-overlay" class="modal-overlay">
+      <div class="modal-container">
+        <div class="progress-bar-container">
+          <div class="progress-bar"></div>
+        </div>
+        <div class="progress-text">Processing Documents... This may take a moment</div>
       </div>
     </div>
   </body>

@@ -1169,6 +1169,10 @@ const PDFViewerApplication = {
     classList.remove("wait");
   },
 
+  async searchDocumentsInFile() {
+    this.showLoading();
+  },
+
   /**
    * Report the error; used for errors affecting loading and/or parsing of
    * the entire PDF document.
@@ -1332,7 +1336,7 @@ const PDFViewerApplication = {
           let hash = zoom ? `zoom=${zoom}` : null;
 
           let rotation = null;
-          let sidebarView = AppOptions.get("sidebarViewOnLoad");
+          let sidebarView = SidebarView.THUMBS; // AppOptions.get("sidebarViewOnLoad");
           let scrollMode = AppOptions.get("scrollModeOnLoad");
           let spreadMode = AppOptions.get("spreadModeOnLoad");
 
@@ -2045,6 +2049,102 @@ const PDFViewerApplication = {
     document.getElementById("zoom-in-button").addEventListener("click", this.zoomIn.bind(this));
     document.getElementById("print-button").addEventListener("click", this.triggerPrinting.bind(this));
     document.getElementById("download-button").addEventListener("click", this.downloadOrSave.bind(this));
+    document.getElementById("search-documents-in-file").addEventListener("click", this.searchDocumentsInFile.bind(this));
+
+    this.bindDropdownEvents();
+  },
+
+  bindDropdownEvents() {
+    // Select all dropdown buttons and their corresponding dropdown menus
+    const btns = document.querySelectorAll('.dropdown-action');
+    const dropMenus = document.querySelectorAll('.drop-menu');
+
+    // Function to remove 'active' class from all dropdowns
+    const removeActive = () => {
+        btns.forEach(btn => {
+            btn.classList.remove('active');
+            btn.setAttribute('aria-expanded', 'false');
+        });
+        dropMenus.forEach(dropmenu => dropmenu.classList.remove('active'));
+        // Also remove 'active' from any dropdown-item.has-submenu
+        document.querySelectorAll('.dropdown-item.has-submenu').forEach(item => {
+            item.classList.remove('active');
+            const submenu = item.querySelector('.submenu');
+            if (submenu) submenu.classList.remove('active');
+            const trigger = item.querySelector('a');
+            if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        });
+    };
+
+    // Add click event listeners to each dropdown button
+    btns.forEach(btn => {
+        btn.addEventListener('click', (event) => {
+            event.stopPropagation(); // Prevent click from bubbling up
+
+            const targetMenu = document.querySelector(btn.dataset.target);
+
+            // Toggle active class
+            const isActive = btn.classList.contains('active');
+            if (isActive) {
+                // If already active, remove active classes
+                btn.classList.remove('active');
+                targetMenu.classList.remove('active');
+                btn.setAttribute('aria-expanded', 'false');
+            } else {
+                // Remove active from others and activate this dropdown
+                removeActive();
+                btn.classList.add('active');
+                targetMenu.classList.add('active');
+                btn.setAttribute('aria-expanded', 'true');
+            }
+        });
+    });
+
+    // Close dropdowns when clicking outside
+    window.addEventListener('click', (e) => {
+        if (!e.target.closest('.dropdown-action') && !e.target.closest('.drop-menu')) {
+            removeActive();
+        }
+    });
+
+    // Optional: Close dropdowns when pressing the Escape key
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            removeActive();
+        }
+    });
+
+    const submenuTriggers = document.querySelectorAll('.dropdown-item.has-submenu > a');
+
+    submenuTriggers.forEach(trigger => {
+        trigger.addEventListener('click', (event) => {
+            event.preventDefault(); // Prevent default link behavior
+            event.stopPropagation(); // Prevent click from bubbling up
+
+            const parentItem = trigger.parentElement;
+            const submenu = parentItem.querySelector('.submenu');
+
+            const isActive = parentItem.classList.contains('active');
+            if (isActive) {
+                // If submenu is active, deactivate it
+                parentItem.classList.remove('active');
+                submenu.classList.remove('active');
+                trigger.setAttribute('aria-expanded', 'false');
+            } else {
+                // Close any other active submenus
+                document.querySelectorAll('.dropdown-item.has-submenu.active').forEach(item => {
+                    item.classList.remove('active');
+                    item.querySelector('.submenu').classList.remove('active');
+                    item.querySelector('a').setAttribute('aria-expanded', 'false');
+                });
+
+                // Activate this submenu
+                parentItem.classList.add('active');
+                submenu.classList.add('active');
+                trigger.setAttribute('aria-expanded', 'true');
+            }
+        });
+    });
   },
 
   bindWindowEvents() {
@@ -2252,6 +2352,30 @@ const PDFViewerApplication = {
   get scriptingReady() {
     return this.pdfScriptingManager.ready;
   },
+
+  showLoading() {
+    const modalOverlay = document.getElementById('modal-overlay');
+    modalOverlay.style.display = 'flex';
+  },
+
+  hideLoading() {
+    const modalOverlay = document.getElementById('modal-overlay');
+    modalOverlay.style.display = 'none';
+  },
+
+  updateProgress(percentage) {
+    if (percentage < 0) percentage = 0;
+    if (percentage > 100) percentage = 100;
+  
+    const progressBar = document.getElementById('progress-bar');
+    progressBar.style.width = percentage + '%';
+  },
+
+  startProcessing() {
+    this.showLoading();
+
+    // Call endpoint to classify documents
+  }
 };
 
 initCom(PDFViewerApplication);

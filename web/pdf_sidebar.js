@@ -138,7 +138,7 @@ class PDFSidebar {
    * @param {number} view - The sidebar view that should become visible,
    *                        must be one of the values in {SidebarView}.
    */
-  setInitialView(view = SidebarView.NONE) {
+  setInitialView(view = SidebarView.THUMBS) {
     if (this.isInitialViewSet) {
       return;
     }
@@ -150,7 +150,7 @@ class PDFSidebar {
       this.#dispatchEvent();
       return;
     }
-    this.switchView(view, /* forceOpen = */ true);
+    this.switchView(view, true);
 
     // Prevent dispatching two back-to-back "sidebarviewchanged" events,
     // since `this.switchView` dispatched the event if the view changed.
