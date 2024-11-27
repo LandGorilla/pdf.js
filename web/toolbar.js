@@ -365,6 +365,9 @@ class Toolbar {
         })
       );
     }
+    
+    opts.zoomPercentageText.innerText = `${Math.round(pageScale * 10000) / 100}%`;
+    opts.pageNumberIndicator.innerText = `${pageNumber} / ${pagesCount}`;
   }
 
   updateLoadingIndicatorState(loading = false) {

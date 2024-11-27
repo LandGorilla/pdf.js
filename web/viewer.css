@@ -1955,9 +1955,24 @@ dialog :link {
   margin-left: 200px;
 }
 
+#zoomPercentageText {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 60px;        /* Adjust the width as needed */
+  height: 40px;       /* Match the height of the buttons */
+  font-size: 16px;
+  color: white;
+}
 
-
-
+#pageNumberIndicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 16px;
+  color: white;
+  min-width: 40px;
+}
 
 /* Dropdown Button */
 /* Base Styling for Dropdown Action Button */

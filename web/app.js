@@ -182,6 +182,7 @@ const PDFViewerApplication = {
   _isCtrlKeyDown: false,
   _caretBrowsing: null,
   _isScrolling: false,
+  accessToken: null,
 
   // Called once when the document is loaded.
   async initialize(appConfig) {
@@ -1170,7 +1171,121 @@ const PDFViewerApplication = {
   },
 
   async searchDocumentsInFile() {
-    this.showLoading();
+    if (!this.pdfDocument) {
+      return;
+    }
+    
+    try {
+      this.showLoading();
+
+      // Start simulating progress up to 90% over the desired duration (e.g., 5 seconds)
+      let control = { accelerate: false };
+      const progressPromise = this.simulateProgress(5, 90, control);
+      const fetchPromise = (async () => {
+
+        // Create PDF
+        const pdfBytes = await this.pdfDocument.getData();
+        const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+        const pdfFile = new File([pdfBlob], 'file.pdf', { type: 'application/pdf' });
+        
+        // Create request
+        const formData = new FormData();
+        formData.append('file', pdfFile);
+
+        const token = this.accessToken ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZW1vLXVzZXIxQGxhbmRnb3JpbGxhLmNvbSIsImV4cCI6MTczNTYwMzM1OH0.cKefcjoQyWKy_ouRvzWMiJsufraDwxG7OjjaDPMY6t8";
+        console.log(">> this.accessToken: " + this.accessToken);
+        const response = await fetch(
+          'http://localhost:8083/v1/vertex-ai/pdf-analyzer/classify',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            body: formData,
+          }
+        );
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+    
+        const data = await response.json();
+        const result = data.result;
+        this.pdfThumbnailViewer?.setDocumentsData(result);
+
+        // Signal to accelerate the progress bar to 100%
+        control.accelerate = true;
+      })();
+
+      // Wait for both the progress simulation and the fetch to complete
+      await Promise.all([progressPromise, fetchPromise]);
+
+      this.hideLoading();
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      this.hideLoading();
+    }
+  },
+
+  updateProgress(percentage) {
+    if (percentage < 0) percentage = 0;
+    if (percentage > 100) percentage = 100;
+  
+    this.currentProgressPercentage = percentage;
+  
+    const progressBar = document.getElementById('progress-bar');
+    progressBar.style.width = percentage + '%';
+  },
+  
+  simulateProgress(durationInSeconds, maxPercentage, control) {
+    return new Promise((resolve) => {
+      const startTime = Date.now();
+      const duration = durationInSeconds * 1000;
+      const targetPercentage = maxPercentage;
+      let rafId;
+  
+      const update = () => {
+        if (control && control.accelerate) {
+          // Accelerate to 100% over 0.5 seconds
+          this.animateProgressTo(100, 0.5).then(resolve);
+          return;
+        }
+        const elapsed = Date.now() - startTime;
+        const percentage = Math.min(
+          (elapsed / duration) * targetPercentage,
+          targetPercentage
+        );
+        this.updateProgress(percentage);
+        rafId = requestAnimationFrame(update);
+      };
+  
+      rafId = requestAnimationFrame(update);
+    });
+  },
+  
+  animateProgressTo(targetPercentage, durationInSeconds) {
+    return new Promise((resolve) => {
+      const startPercentage = this.currentProgressPercentage || 0;
+      const startTime = Date.now();
+      const duration = durationInSeconds * 1000;
+      let rafId;
+  
+      const update = () => {
+        const elapsed = Date.now() - startTime;
+        let percentage =
+          startPercentage +
+          ((targetPercentage - startPercentage) * elapsed) / duration;
+        if (percentage >= targetPercentage) {
+          percentage = targetPercentage;
+          this.updateProgress(percentage);
+          resolve(); // Animation complete
+          return;
+        }
+        this.updateProgress(percentage);
+        rafId = requestAnimationFrame(update);
+      };
+  
+      rafId = requestAnimationFrame(update);
+    });
   },
 
   /**
@@ -2361,14 +2476,6 @@ const PDFViewerApplication = {
   hideLoading() {
     const modalOverlay = document.getElementById('modal-overlay');
     modalOverlay.style.display = 'none';
-  },
-
-  updateProgress(percentage) {
-    if (percentage < 0) percentage = 0;
-    if (percentage > 100) percentage = 100;
-  
-    const progressBar = document.getElementById('progress-bar');
-    progressBar.style.width = percentage + '%';
   },
 
   startProcessing() {

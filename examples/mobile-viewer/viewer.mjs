@@ -57,17 +57,31 @@ const PDFViewerApplication = {
       );
     }
 
-    const url = params.url;
     const self = this;
-    this.setTitleUsingUrl(url);
+    let loadingTask;
 
-    // Loading document.
-    const loadingTask = pdfjsLib.getDocument({
-      url,
-      maxImageSize: MAX_IMAGE_SIZE,
-      cMapUrl: CMAP_URL,
-      cMapPacked: CMAP_PACKED,
-    });
+    if (params.data) {
+      loadingTask = pdfjsLib.getDocument({
+        data: params.data,
+        maxImageSize: MAX_IMAGE_SIZE,
+        cMapUrl: CMAP_URL,
+        cMapPacked: CMAP_PACKED,
+      });
+      this.setTitle('');
+    } else if (params.url) {
+      const url = params.url;
+      this.setTitleUsingUrl(url);
+
+      loadingTask = pdfjsLib.getDocument({
+        url,
+        maxImageSize: MAX_IMAGE_SIZE,
+        cMapUrl: CMAP_URL,
+        cMapPacked: CMAP_PACKED,
+      });
+    } else {
+      throw new Error('PDFViewerApplication.open: Expected either data or url.');
+    }
+
     this.pdfLoadingTask = loadingTask;
 
     loadingTask.onProgress = function (progressData) {
@@ -76,7 +90,6 @@ const PDFViewerApplication = {
 
     return loadingTask.promise.then(
       function (pdfDocument) {
-        // Document loaded, specifying document for the viewer.
         self.pdfDocument = pdfDocument;
         self.pdfViewer.setDocument(pdfDocument);
         self.pdfLinkService.setDocument(pdfDocument);

@@ -46,6 +46,8 @@ function getViewerConfiguration() {
       pageNumber: document.getElementById("pageNumber"),
       scaleSelect: document.getElementById("scaleSelect"),
       customScaleOption: document.getElementById("customScaleOption"),
+      zoomPercentageText: document.getElementById("zoomPercentageText"),
+      pageNumberIndicator: document.getElementById("pageNumberIndicator"),
       previous: document.getElementById("previous"),
       next: document.getElementById("next"),
       zoomIn: document.getElementById("zoomInButton"),
@@ -255,6 +257,7 @@ function webViewerLoad() {
   PDFViewerApplication.run(config);
 }
 
+
 // Block the "load" event until all pages are loaded, to ensure that printing
 // works in Firefox; see https://bugzilla.mozilla.org/show_bug.cgi?id=1618553
 document.blockUnblockOnload?.(true);
@@ -267,6 +270,22 @@ if (
 } else {
   document.addEventListener("DOMContentLoaded", webViewerLoad, true);
 }
+
+window.addEventListener('message', function(event) {
+  // For security, verify the origin of the message
+  if (event.origin !== window.location.origin) {
+    console.warn('Origin not allowed:', event.origin);
+    return;
+  }
+
+  const { type, token } = event.data;
+
+  if (type === 'SET_TOKEN') {
+    if (token) {
+      PDFViewerApplication.accessToken = token;
+    }
+  }
+});
 
 export {
   AppConstants as PDFViewerApplicationConstants,

@@ -108,8 +108,11 @@ class PDFThumbnailViewer {
     return docs;
   }
 
-  setDocumentsData(documentsData) {
-    this._documentsData = documentsData;
+  setDocumentsData(documentsResponse) {
+    this.#resetView();
+    
+    this._documentsData = this.initializeDocuments(documentsResponse);
+    this.viewType = ViewType.GROUPED;
     this.#renderDocumentContainers();
   }
 
