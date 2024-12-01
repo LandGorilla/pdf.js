@@ -92,7 +92,7 @@ class PDFThumbnailViewer {
     );
     this.#resetView();
 
-    this.eventBus._on('thumbnail-delete', this.#onDeleteThumbnail.bind(this));
+    // this.eventBus._on('thumbnail-delete', this.#onDeleteThumbnail.bind(this));
     this.eventBus._on('thumbnail-download', this.#onDownloadPage.bind(this));
   }
 
@@ -108,10 +108,11 @@ class PDFThumbnailViewer {
     return docs;
   }
 
-  setDocumentsData(documentsResponse) {
+  setDocumentsData(response) {
     this.#resetView();
     
-    this._documentsData = this.initializeDocuments(documentsResponse);
+    this._documentsData = this.initializeDocuments(response.result);
+    this._documenTypes = response.document_types;
     this.viewType = ViewType.GROUPED;
     this.#renderDocumentContainers();
   }
@@ -286,11 +287,9 @@ class PDFThumbnailViewer {
 
         switch (this.viewType) {
           case ViewType.NORMAL:
-            console.log(">> NORMAL");
             this.#renderDocuments(firstPdfPage, viewport);
             break;
           case ViewType.GROUPED:
-            console.log(">> GROUPED");
             this.#renderDocumentContainers();
             this.scrollThumbnailIntoView(1);
             break;
@@ -435,7 +434,7 @@ class PDFThumbnailViewer {
       fileNameInput.type = 'text';
       fileNameInput.id = `file-name-${doc.id}`;
       fileNameInput.value = doc.document || ''; // Use existing file name if available
-      fileNameInput.style.width = '200px'; // Adjust width as needed
+      // fileNameInput.style.width = '100%'; // Adjust width as needed
 
       // Append label and input to the form container
       formContainer.appendChild(fileNameLabel);
@@ -450,10 +449,10 @@ class PDFThumbnailViewer {
 
       const docTypeSelect = document.createElement('select');
       docTypeSelect.id = `doc-type-${doc.id}`;
-      docTypeSelect.style.width = '200px'; // Adjust width as needed
+      docTypeSelect.style.minWidth = '160px'; // Adjust width as needed
 
       // Add options to the select element (you can customize these)
-      const docTypes = ['Invoice', 'Receipt', 'Report', 'Contract']; // Example document types
+      const docTypes = this._documenTypes; // Example document types
       for (const type of docTypes) {
         const option = document.createElement('option');
         option.value = type;
@@ -462,8 +461,8 @@ class PDFThumbnailViewer {
       }
 
       // Set the selected value if available
-      if (doc.documentType) {
-        docTypeSelect.value = doc.documentType;
+      if (doc.document_type) {
+        docTypeSelect.value = doc.document_type;
       }
 
       // Append label and select to the form container
@@ -478,7 +477,7 @@ class PDFThumbnailViewer {
       thumbnailsContainer.classList.add('thumbnails-container');
       thumbnailsContainer.style.display = 'flex';
       thumbnailsContainer.style.flexWrap = 'wrap';
-      thumbnailsContainer.style.gap = '10px';
+      // thumbnailsContainer.style.gap = '10px';
       thumbnailsContainer.style.marginTop = '15px'; // Add margin for spacing
       docContainer.appendChild(thumbnailsContainer);
 
@@ -530,6 +529,105 @@ class PDFThumbnailViewer {
       // Dispatch an event indicating thumbnails are ready
       this.eventBus.dispatch('thumbnailsready', { source: this });
     });
+  }
+
+  // Function to generate a unique ID (you can customize this logic)
+  #generateUniqueId() {
+    return '_' + Math.random().toString(36).substr(2, 9);
+  }
+
+  // Function to add a new empty document container at the beginning
+  addNewEmptyDocumentContainer() {
+    // Create a new empty document object
+    const newDoc = {
+      id: this.#generateUniqueId(),
+      document: '',        // Empty file name
+      document_type: '',   // Default document type
+      pages: [],           // Empty pages array
+    };
+
+    // Insert the new document at the beginning of _documentsData
+    this._documentsData.unshift(newDoc);
+
+    // Create a new document container and insert it at the beginning of the container
+    const docContainer = document.createElement('div');
+    docContainer.classList.add('document-container');
+    docContainer.id = newDoc.id;
+
+    // Create the form container with file input and document type
+    const formContainer = document.createElement('div');
+    formContainer.classList.add('form-container');
+
+    // Create label and text input for File Name
+    const fileNameLabel = document.createElement('label');
+    fileNameLabel.textContent = 'File Name:';
+    fileNameLabel.htmlFor = `file-name-${newDoc.id}`;
+    fileNameLabel.style.display = 'block'; // Add display block for styling
+
+    const fileNameInput = document.createElement('input');
+    fileNameInput.type = 'text';
+    fileNameInput.id = `file-name-${newDoc.id}`;
+    fileNameInput.value = ''; // Empty value for new document
+    fileNameInput.style.width = '100%'; // Adjust width as needed
+
+    // Append label and input to the form container
+    formContainer.appendChild(fileNameLabel);
+    formContainer.appendChild(fileNameInput);
+
+    // Create label and dropdown for Document Type
+    const docTypeLabel = document.createElement('label');
+    docTypeLabel.textContent = 'Document Type:';
+    docTypeLabel.htmlFor = `doc-type-${newDoc.id}`;
+    docTypeLabel.style.display = 'block'; // Add display block for styling
+    docTypeLabel.style.marginTop = '10px'; // Add margin for spacing
+
+    const docTypeSelect = document.createElement('select');
+    docTypeSelect.id = `doc-type-${newDoc.id}`;
+    docTypeSelect.style.minWidth = '160px'; // Adjust width as needed
+
+    // Add options to the select element
+    const docTypes = this._documenTypes; // Example document types
+    for (const type of docTypes) {
+      const option = document.createElement('option');
+      option.value = type;
+      option.textContent = type;
+      docTypeSelect.appendChild(option);
+    }
+
+    // Set the selected value to default or empty
+    docTypeSelect.value = '';
+
+    // Append label and select to the form container
+    formContainer.appendChild(docTypeLabel);
+    formContainer.appendChild(docTypeSelect);
+
+    // Append the form container to the document container
+    docContainer.appendChild(formContainer);
+
+    // Create a container for the thumbnails (empty for new document)
+    const thumbnailsContainer = document.createElement('div');
+    thumbnailsContainer.classList.add('thumbnails-container');
+    thumbnailsContainer.style.display = 'flex';
+    thumbnailsContainer.style.flexWrap = 'wrap';
+    thumbnailsContainer.style.marginTop = '15px'; // Add margin for spacing
+    docContainer.appendChild(thumbnailsContainer);
+
+    // Insert the new document container at the beginning of the main container
+    this.container.insertBefore(docContainer, this.container.firstChild);
+
+    // Make the thumbnails container sortable
+    Sortable.create(thumbnailsContainer, {
+      group: 'shared', // Allow dragging between containers
+      animation: 150,
+      ghostClass: 'sortable-ghost',
+      chosenClass: 'sortable-chosen',
+      onEnd: (evt) => {
+        // Handle the drag and drop event
+        this.#onThumbnailDrop(evt);
+      },
+    });
+
+    scrollIntoView(docContainer, { top: THUMBNAIL_SCROLL_MARGIN });
   }
 
   #onDeleteThumbnail(evt) {

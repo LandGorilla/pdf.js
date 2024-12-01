@@ -759,7 +759,7 @@ body {
   float: var(--inline-start);
   width: var(--thumbnail-width);
   height: var(--thumbnail-height);
-  margin: 0 10px 5px;
+  margin: 5px 5px;
   padding: 1px;
   border: 7px solid transparent;
   border-radius: 2px;
@@ -1769,16 +1769,22 @@ dialog :link {
 }
 
 .document-container {
-  /* Ensure the container can expand */
   width: 100%;
+  padding-bottom: 30px;
+  padding-top: 20px;
+  border-bottom: 1px;
+  border-bottom-color: white;
+  border-bottom-style: solid;
 }
 
 .thumbnails-container {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
   height: auto;
   overflow: visible;
+  border: 1px dashed #6F6F73;
+  border-radius: 10px;
+  min-height: 150px;
 }
 
 .actions {
@@ -1840,7 +1846,7 @@ dialog :link {
 /* Styles for the form container */
 .form-container {
   margin-bottom: 10px;
-  width: 165px;
+  width: 100%;
   display: flex;
   flex-wrap: wrap;
   overflow: visible;
@@ -1911,7 +1917,7 @@ dialog :link {
   gap: 60px;
 
   position: absolute;
-  bottom: 10px;
+  bottom: 40px;
   left: calc(50% - var(--control-bar-offset-left, 0px)/2);
   transform: translateX(-50%);
 }

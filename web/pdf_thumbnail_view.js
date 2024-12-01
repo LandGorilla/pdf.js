@@ -82,7 +82,7 @@ class PDFThumbnailView {
     anchor.setAttribute("data-l10n-id", "pdfjs-thumb-page-title");
     anchor.setAttribute("data-l10n-args", this.#pageL10nArgs);
     anchor.onclick = function () {
-      linkService.goToPage(id);
+      linkService.goToPage(pageNumber);
       return false;
     };
     this.anchor = anchor;

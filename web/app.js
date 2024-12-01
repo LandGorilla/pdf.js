@@ -1170,6 +1170,10 @@ const PDFViewerApplication = {
     classList.remove("wait");
   },
 
+  createDocumentContainer() {
+    this.pdfThumbnailViewer?.addNewEmptyDocumentContainer();
+  },
+
   async searchDocumentsInFile() {
     if (!this.pdfDocument) {
       return;
@@ -1180,7 +1184,7 @@ const PDFViewerApplication = {
 
       // Start simulating progress up to 90% over the desired duration (e.g., 5 seconds)
       let control = { accelerate: false };
-      const progressPromise = this.simulateProgress(5, 90, control);
+      const progressPromise = this.simulateProgress(20, 90, control);
       const fetchPromise = (async () => {
 
         // Create PDF
@@ -1192,10 +1196,10 @@ const PDFViewerApplication = {
         const formData = new FormData();
         formData.append('file', pdfFile);
 
-        const token = this.accessToken ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZW1vLXVzZXIxQGxhbmRnb3JpbGxhLmNvbSIsImV4cCI6MTczNTYwMzM1OH0.cKefcjoQyWKy_ouRvzWMiJsufraDwxG7OjjaDPMY6t8";
-        console.log(">> this.accessToken: " + this.accessToken);
+        const token = this.accessToken;
+        const API_URL = 'https://research.landgorilla.dev'; //'localhost:8083';
         const response = await fetch(
-          'http://localhost:8083/v1/vertex-ai/pdf-analyzer/classify',
+          `${API_URL}/v1/vertex-ai/pdf-analyzer/classify`,
           {
             method: 'POST',
             headers: {
@@ -1209,8 +1213,7 @@ const PDFViewerApplication = {
         }
     
         const data = await response.json();
-        const result = data.result;
-        this.pdfThumbnailViewer?.setDocumentsData(result);
+        this.pdfThumbnailViewer?.setDocumentsData(data);
 
         // Signal to accelerate the progress bar to 100%
         control.accelerate = true;
@@ -2165,6 +2168,7 @@ const PDFViewerApplication = {
     document.getElementById("print-button").addEventListener("click", this.triggerPrinting.bind(this));
     document.getElementById("download-button").addEventListener("click", this.downloadOrSave.bind(this));
     document.getElementById("search-documents-in-file").addEventListener("click", this.searchDocumentsInFile.bind(this));
+    document.getElementById("create-document-container-button").addEventListener("click", this.createDocumentContainer.bind(this));
 
     this.bindDropdownEvents();
   },
@@ -2260,6 +2264,12 @@ const PDFViewerApplication = {
             }
         });
     });
+
+    document.querySelectorAll('.drop-menu a').forEach(option => {
+      option.addEventListener('click', () => {
+          removeActive();
+      });
+  });
   },
 
   bindWindowEvents() {

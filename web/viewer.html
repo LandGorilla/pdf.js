@@ -709,46 +709,45 @@ See https://github.com/adobe-type-tools/cmap-resources
 <!--#endif-->
       </div>  <!-- dialogContainer -->
 
+      <div id="control-bar">
+        <div class="button-group">
+          <div id="previous-page-button" class="button">
+            <img src="images/chevron-left.svg" alt="Previous page" width="24" height="24">
+          </div>
+          <div class="middle">
+            <div id="pageNumberIndicator"></div>
+          </div>
+          <div id="next-page-button" class="button">
+            <img src="images/chevron-right.svg" alt="Next page" width="24" height="24">
+          </div>
+        </div>
+        <div class="button-group">
+          <div id="zoom-out-button" class="button">
+            <img src="images/minus.svg" alt="Zoom out" width="24" height="24">
+          </div>
+          <div id="zoomPercentageText"></div>
+          <div id="zoom-in-button" class="button">
+            <img src="images/plus.svg" alt="Zoom in" width="24" height="24">
+          </div>
+        </div>
+        <div class="button-group">
+          <div id="print-button" class="button"><span class="icon">
+            <img src="images/printer.svg" alt="Printer" width="24" height="24">
+          </span></div>
+          <div id="download-button" class="button">
+            <img src="images/download.svg" alt="Download" width="24" height="24">
+          </div>
+        </div>
+      </div>
+      <div id="modal-overlay" class="modal-overlay">
+        <div class="modal-container">
+          <div class="progress-bar-container">
+            <div id="progress-bar" class="progress-bar"></div>
+          </div>
+          <div class="progress-text">Processing Documents... This may take a moment</div>
+        </div>
+      </div>
     </div> <!-- outerContainer -->
     <div id="printContainer"></div>
-
-    <div id="control-bar">
-      <div class="button-group">
-        <div id="previous-page-button" class="button">
-          <img src="images/chevron-left.svg" alt="Previous page" width="24" height="24">
-        </div>
-        <div class="middle">
-          <div id="pageNumberIndicator"></div>
-        </div>
-        <div id="next-page-button" class="button">
-          <img src="images/chevron-right.svg" alt="Next page" width="24" height="24">
-        </div>
-      </div>
-      <div class="button-group">
-        <div id="zoom-out-button" class="button">
-          <img src="images/minus.svg" alt="Zoom out" width="24" height="24">
-        </div>
-        <div id="zoomPercentageText"></div>
-        <div id="zoom-in-button" class="button">
-          <img src="images/plus.svg" alt="Zoom in" width="24" height="24">
-        </div>
-      </div>
-      <div class="button-group">
-        <div id="print-button" class="button"><span class="icon">
-          <img src="images/printer.svg" alt="Printer" width="24" height="24">
-        </span></div>
-        <div id="download-button" class="button">
-          <img src="images/download.svg" alt="Download" width="24" height="24">
-        </div>
-      </div>
-    </div>
-    <div id="modal-overlay" class="modal-overlay">
-      <div class="modal-container">
-        <div class="progress-bar-container">
-          <div id="progress-bar" class="progress-bar"></div>
-        </div>
-        <div class="progress-text">Processing Documents... This may take a moment</div>
-      </div>
-    </div>
   </body>
 </html>
