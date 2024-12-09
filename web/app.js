@@ -89,6 +89,7 @@ import { Preferences } from "web-preferences";
 import { SecondaryToolbar } from "web-secondary_toolbar";
 import { Toolbar } from "web-toolbar";
 import { ViewHistory } from "./view_history.js";
+import { PDFRightSidebar } from './pdf_rightsidebar.js';
 
 const FORCE_PAGES_LOADED_TIMEOUT = 10000; // ms
 
@@ -696,6 +697,16 @@ const PDFViewerApplication = {
         );
       };
     }
+
+    const outerContainer = document.getElementById('outerContainer');
+    const rightSidebarContainer = document.getElementById('rightSidebarContainer');
+    const rightSidebarResizer = document.getElementById('rightSidebarResizer');
+
+    this.pdfRightSidebar = new PDFRightSidebar({
+      outerContainer,
+      rightSidebarContainer,
+      rightSidebarResizer
+    });
   },
 
   async run(config) {
@@ -1197,7 +1208,7 @@ const PDFViewerApplication = {
         formData.append('file', pdfFile);
 
         const token = this.accessToken;
-        const API_URL = 'https://research.landgorilla.dev'; //'localhost:8083';
+        const API_URL = 'http://localhost:8083'; //'https://research.landgorilla.dev';
         const response = await fetch(
           `${API_URL}/v1/vertex-ai/pdf-analyzer/classify`,
           {
@@ -2145,28 +2156,6 @@ const PDFViewerApplication = {
       );
     }
 
-    const resizeObserver = new ResizeObserver(entries => {
-      for (let entry of entries) {
-        const controlBar = document.getElementById('control-bar');
-        const sidebarContainer = document.getElementById('sidebarContainer');
-        controlBar.style.setProperty('--control-bar-offset-left', `-${sidebarContainer.offsetWidth-10}px`);
-      }
-    });
-    const sidebarContainer = document.getElementById('sidebarContainer');
-    resizeObserver.observe(sidebarContainer);
-
-    document.getElementById("previous-page-button").addEventListener("click", function () {
-      pdfViewer.previousPage();
-    });
-
-    document.getElementById("next-page-button").addEventListener("click", function () {
-      pdfViewer.nextPage();
-    });
-
-    document.getElementById("zoom-out-button").addEventListener("click", this.zoomOut.bind(this));
-    document.getElementById("zoom-in-button").addEventListener("click", this.zoomIn.bind(this));
-    document.getElementById("print-button").addEventListener("click", this.triggerPrinting.bind(this));
-    document.getElementById("download-button").addEventListener("click", this.downloadOrSave.bind(this));
     document.getElementById("search-documents-in-file").addEventListener("click", this.searchDocumentsInFile.bind(this));
     document.getElementById("create-document-container-button").addEventListener("click", this.createDocumentContainer.bind(this));
 

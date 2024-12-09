@@ -233,7 +233,8 @@ See https://github.com/adobe-type-tools/cmap-resources
                   <span id="numPages" class="toolbarLabel"></span>
                 </div>
               </div>
-              <div id="toolbarViewerMiddle" class="toolbarHorizontalGroup" style="display: none;">
+              <div class="toolbarButtonSpacer"></div>
+              <div id="toolbarViewerMiddle" class="toolbarHorizontalGroup">
                 <div class="toolbarHorizontalGroup">
                   <button id="zoomOutButton" class="toolbarButton" type="button" title="Zoom Out" tabindex="0" data-l10n-id="pdfjs-zoom-out-button">
                     <span data-l10n-id="pdfjs-zoom-out-button-label">Zoom Out</span>
@@ -261,7 +262,8 @@ See https://github.com/adobe-type-tools/cmap-resources
                   </select>
                 </span>
               </div>
-              <div id="toolbarViewerRight" class="toolbarHorizontalGroup" style="display: none;">
+              <div class="toolbarButtonSpacer"></div>
+              <div id="toolbarViewerRight" class="toolbarHorizontalGroup">
                 <div id="editorModeButtons" class="toolbarHorizontalGroup" role="radiogroup">
                   <div id="editorHighlight" class="toolbarButtonWithContainer">
                     <button id="editorHighlightButton" class="toolbarButton" type="button" disabled="disabled" title="Highlight" role="radio" aria-expanded="false" aria-haspopup="true" aria-controls="editorHighlightParamsToolbar" tabindex="0" data-l10n-id="pdfjs-editor-highlight-button">
@@ -340,7 +342,7 @@ See https://github.com/adobe-type-tools/cmap-resources
                   </div>
                 </div>
 
-                <div id="editorModeSeparator" class="verticalToolbarSeparator"></div>
+                <!-- <div id="editorModeSeparator" class="verticalToolbarSeparator"></div> -->
 
                 <div class="toolbarHorizontalGroup hiddenMediumView">
                   <button id="printButton" class="toolbarButton" type="button" title="Print" tabindex="0" data-l10n-id="pdfjs-print-button">
@@ -352,9 +354,7 @@ See https://github.com/adobe-type-tools/cmap-resources
                   </button>
                 </div>
 
-                <div class="verticalToolbarSeparator hiddenMediumView"></div>
-
-                <div id="secondaryToolbarToggle" class="toolbarButtonWithContainer">
+                <div id="secondaryToolbarToggle" class="toolbarButtonWithContainer" style="display: none;">
                   <button id="secondaryToolbarToggleButton" class="toolbarButton" type="button" title="Tools" tabindex="0" data-l10n-id="pdfjs-tools-button" aria-expanded="false" aria-haspopup="true" aria-controls="secondaryToolbar">
                     <span data-l10n-id="pdfjs-tools-button-label">Tools</span>
                   </button>
@@ -480,6 +480,11 @@ See https://github.com/adobe-type-tools/cmap-resources
           <div id="viewer" class="pdfViewer"></div>
         </div>
       </div> <!-- mainContainer -->
+
+      <div id="rightSidebarContainer" class="PDFRightSidebar">
+        <div id="rightSidebarContent"></div>
+        <div id="rightSidebarResizer"></div>
+      </div>
 
       <div id="dialogContainer">
         <dialog id="passwordDialog">
@@ -709,36 +714,6 @@ See https://github.com/adobe-type-tools/cmap-resources
 <!--#endif-->
       </div>  <!-- dialogContainer -->
 
-      <div id="control-bar">
-        <div class="button-group">
-          <div id="previous-page-button" class="button">
-            <img src="images/chevron-left.svg" alt="Previous page" width="24" height="24">
-          </div>
-          <div class="middle">
-            <div id="pageNumberIndicator"></div>
-          </div>
-          <div id="next-page-button" class="button">
-            <img src="images/chevron-right.svg" alt="Next page" width="24" height="24">
-          </div>
-        </div>
-        <div class="button-group">
-          <div id="zoom-out-button" class="button">
-            <img src="images/minus.svg" alt="Zoom out" width="24" height="24">
-          </div>
-          <div id="zoomPercentageText"></div>
-          <div id="zoom-in-button" class="button">
-            <img src="images/plus.svg" alt="Zoom in" width="24" height="24">
-          </div>
-        </div>
-        <div class="button-group">
-          <div id="print-button" class="button"><span class="icon">
-            <img src="images/printer.svg" alt="Printer" width="24" height="24">
-          </span></div>
-          <div id="download-button" class="button">
-            <img src="images/download.svg" alt="Download" width="24" height="24">
-          </div>
-        </div>
-      </div>
       <div id="modal-overlay" class="modal-overlay">
         <div class="modal-container">
           <div class="progress-bar-container">

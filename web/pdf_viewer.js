@@ -368,6 +368,16 @@ class PDFViewer {
       // Ensure that Fluent is connected in e.g. the COMPONENTS build.
       this.l10n.translate(this.container);
     }
+
+    this.eventBus._on('thumbnail-delete', this.#onDeleteThumbnail.bind(this));
+  }
+
+  #onDeleteThumbnail(evt) {
+    const { source, pageNumber } = evt;
+    console.log(">> pageNumber: " + pageNumber);
+
+
+
   }
 
   get pagesCount() {

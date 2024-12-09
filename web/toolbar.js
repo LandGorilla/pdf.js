@@ -267,6 +267,8 @@ class Toolbar {
         { once: true }
       );
     }
+
+    eventBus._on("pageinfochanged", this.#onPageInfoChanged.bind(this));
   }
 
   #editorModeChanged({ mode }) {
@@ -365,14 +367,18 @@ class Toolbar {
         })
       );
     }
-    
-    opts.zoomPercentageText.innerText = `${Math.round(pageScale * 10000) / 100}%`;
-    opts.pageNumberIndicator.innerText = `${pageNumber} / ${pagesCount}`;
   }
 
   updateLoadingIndicatorState(loading = false) {
     const { pageNumber } = this.#opts;
     pageNumber.classList.toggle("loading", loading);
+  }
+
+  #onPageInfoChanged({pageNumber, totalPages}) {
+    console.log(">>> pageNumber: " + pageNumber);
+    console.log(">>> totalPages: " + totalPages);
+    this.setPageNumber(pageNumber, pageNumber);
+    this.setPagesCount(totalPages, false);
   }
 }
 

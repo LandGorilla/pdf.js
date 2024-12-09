@@ -112,6 +112,7 @@ class PDFSidebar {
 
     this.#isRTL = l10n.getDirection() === "rtl";
     this.#addEventListeners();
+    this.#loadSavedWidth();
   }
 
   reset() {
@@ -125,6 +126,22 @@ class PDFSidebar {
     this.attachmentsButton.disabled = false;
     this.layersButton.disabled = false;
     this._currentOutlineItemButton.disabled = true;
+  }
+
+  #loadSavedWidth() {
+    try {
+      const savedWidth = parseInt(localStorage.getItem('sidebarWidth'), 10);
+      if (!isNaN(savedWidth)) {
+        this.#updateWidth(savedWidth);
+      } else {
+        // If no valid saved width, set to a default value
+        this.#updateWidth(SIDEBAR_MIN_WIDTH);
+      }
+    } catch (e) {
+      console.warn('Could not load sidebar width from localStorage:', e);
+      // Set to default width in case of error
+      this.#updateWidth(SIDEBAR_MIN_WIDTH);
+    }
   }
 
   /**
@@ -488,6 +505,14 @@ class PDFSidebar {
     this.#width = width;
 
     docStyle.setProperty(SIDEBAR_WIDTH_VAR, `${width}px`);
+
+    // Save the updated width to localStorage
+    try {
+      localStorage.setItem('sidebarWidth', width);
+    } catch (e) {
+      console.warn('Could not save sidebar width to localStorage:', e);
+    }
+
     return true;
   }
 
