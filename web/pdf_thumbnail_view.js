@@ -81,8 +81,11 @@ class PDFThumbnailView {
     anchor.href = linkService.getAnchorUrl("#page=" + id);
     anchor.setAttribute("data-l10n-id", "pdfjs-thumb-page-title");
     anchor.setAttribute("data-l10n-args", this.#pageL10nArgs);
+
+    const self = this;
     anchor.onclick = function () {
       linkService.goToPage(pageNumber);
+      eventBus.dispatch("thumbnail-click", { source: self, id: id });
       return false;
     };
     this.anchor = anchor;
@@ -100,6 +103,7 @@ class PDFThumbnailView {
     // Create the thumbnail container
     const div = document.createElement("div");
     div.className = "thumbnail";
+    div.id = this.id;
     div.setAttribute("data-page-number", this.id);
     this.div = div;
     this.#updateDims();

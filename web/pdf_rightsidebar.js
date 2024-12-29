@@ -42,76 +42,16 @@ export class PDFRightSidebar {
         this.outerContainer.classList.remove('sidebarResizingRight');
       }, true);
     }
-  }
+}
 
-  document.addEventListener('DOMContentLoaded', () => {
-    const outerContainer = document.getElementById('outerContainer');
-    const rightSidebarContainer = document.getElementById('rightSidebarContainer');
-    const rightSidebarResizer = document.getElementById('rightSidebarResizer');
-  
-    const pdfRightSidebar = new PDFRightSidebar({
-      outerContainer,
-      rightSidebarContainer,
-      rightSidebarResizer
-    });
-  });
+// document.addEventListener('DOMContentLoaded', () => {
+//     const outerContainer = document.getElementById('outerContainer');
+//     const rightSidebarContainer = document.getElementById('rightSidebarContainer');
+//     const rightSidebarResizer = document.getElementById('rightSidebarResizer');
 
-// class PDFRightSidebar {
-//     /**
-//      * @param {Object} options
-//      * @param {HTMLElement} options.outerContainer - The main outer container of the viewer.
-//      * @param {HTMLElement} options.rightSidebarContainer - The container element for the right sidebar.
-//      * @param {HTMLElement} options.toggleButton - The button to toggle the right sidebar.
-//      */
-//     constructor({ outerContainer, rightSidebarContainer, toggleButton }) {
-//         this.outerContainer = outerContainer;
-//         this.rightSidebarContainer = rightSidebarContainer;
-//         this.toggleButton = toggleButton;
-//         this.isOpen = false;
-
-//         this._addEventListeners();
-//     }
-
-//     open() {
-//         if (this.isOpen) {
-//             return;
-//         }
-//         this.isOpen = true;
-//         this.outerContainer.classList.add("rightSidebarOpen");
-//     }
-
-//     close() {
-//         if (!this.isOpen) {
-//             return;
-//         }
-//         this.isOpen = false;
-//         this.outerContainer.classList.remove("rightSidebarOpen");
-//     }
-
-//     toggle() {
-//         if (this.isOpen) {
-//             this.close();
-//         } else {
-//             this.open();
-//         }
-//     }
-
-//     _addEventListeners() {
-//         this.toggleButton.addEventListener("click", () => {
-//             this.toggle();
-//         });
-//     }
-// }
-
-// // Example usage:
-// document.addEventListener("DOMContentLoaded", () => {
-//     const outerContainer = document.getElementById("outerContainer");
-//     const rightSidebarContainer = document.getElementById("rightSidebarContainer");
-//     const toggleButton = document.getElementById("rightSidebarToggleButton");
-
-//     const rightSidebar = new PDFRightSidebar({
-//         outerContainer,
-//         rightSidebarContainer,
-//         toggleButton
+//     const pdfRightSidebar = new PDFRightSidebar({
+//     outerContainer,
+//     rightSidebarContainer,
+//     rightSidebarResizer
 //     });
 // });

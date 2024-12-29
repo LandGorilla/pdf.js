@@ -32,14 +32,10 @@ import {
   watchScroll,
 } from "./ui_utils.js";
 import { PDFThumbnailView, TempImageFactory } from "./pdf_thumbnail_view.js";
+import { PDFViewerApplication, ViewType } from "./app.js";
 
 const THUMBNAIL_SCROLL_MARGIN = -19;
 const THUMBNAIL_SELECTED_CLASS = "selected";
-
-const ViewType = Object.freeze({
-  NORMAL: 'NORMAL',
-  GROUPED: 'GROUPED',
-});
 
 /**
  * @typedef {Object} PDFThumbnailViewerOptions
@@ -82,8 +78,7 @@ class PDFThumbnailViewer {
     this.pageColors = pageColors || null;
     this.enableHWA = enableHWA || false;
     this.documentsResponse = documentsResponse;
-    this._documentsData = this.initializeDocuments(documentsResponse);
-    this.viewType = ViewType.NORMAL;
+    this._documentStates = {};
 
     this.scroll = watchScroll(
       this.container,
@@ -92,8 +87,9 @@ class PDFThumbnailViewer {
     );
     this.#resetView();
 
-    this.eventBus._on('thumbnail-delete', this.#onDeleteThumbnail.bind(this));
-    this.eventBus._on('thumbnail-download', this.#onDownloadPage.bind(this));
+    this.eventBus._on('thumbnail-delete', this._onDeleteThumbnail.bind(this));
+    this.eventBus._on('thumbnail-download', this._onDownloadPage.bind(this));
+    this.eventBus._on('thumbnail-click', this._onSelectThumbnail.bind(this));
   }
 
   initializeDocuments(documents) {
@@ -113,7 +109,15 @@ class PDFThumbnailViewer {
     
     this._documentsData = this.initializeDocuments(response.result);
     this._documenTypes = response.document_types;
-    this.viewType = ViewType.GROUPED;
+
+    for (const doc of this._documentsData) {
+      this._documentStates[doc.id] = {
+        state: 'none',
+        progress: 0,
+        result: null,
+      };
+    }
+
     this.#renderDocumentContainers();
   }
 
@@ -137,7 +141,7 @@ class PDFThumbnailViewer {
       return;
     }
 
-    switch (this.viewType) {
+    switch (PDFViewerApplication.viewState) {
       case ViewType.NORMAL:
         this.#scrollToDocumentPage(pageNumber);
         break;
@@ -285,7 +289,7 @@ class PDFThumbnailViewer {
         const viewport = firstPdfPage.getViewport({ scale: 1 });
         this._defaultViewport = viewport;
 
-        switch (this.viewType) {
+        switch (PDFViewerApplication.viewState) {
           case ViewType.NORMAL:
             this.#renderDocuments(firstPdfPage, viewport);
             break;
@@ -418,7 +422,7 @@ class PDFThumbnailViewer {
       // Create a container for the document
       const docContainer = document.createElement('div');
       docContainer.classList.add('document-container');
-      docContainer.id = doc.id; // Use the updated document ID
+      docContainer.id = doc.id;
 
       // Create a form container (optional)
       const formContainer = document.createElement('div');
@@ -433,8 +437,7 @@ class PDFThumbnailViewer {
       const fileNameInput = document.createElement('input');
       fileNameInput.type = 'text';
       fileNameInput.id = `file-name-${doc.id}`;
-      fileNameInput.value = doc.document || ''; // Use existing file name if available
-      // fileNameInput.style.width = '100%'; // Adjust width as needed
+      fileNameInput.value = doc.document || '';
 
       // Append label and input to the form container
       formContainer.appendChild(fileNameLabel);
@@ -451,7 +454,6 @@ class PDFThumbnailViewer {
       docTypeSelect.id = `doc-type-${doc.id}`;
       docTypeSelect.style.minWidth = '160px'; // Adjust width as needed
 
-      // Add options to the select element (you can customize these)
       const docTypes = this._documenTypes; // Example document types
       for (const type of docTypes) {
         const option = document.createElement('option');
@@ -472,13 +474,40 @@ class PDFThumbnailViewer {
       // Append the form container to the document container
       docContainer.appendChild(formContainer);
 
+      // Create a horizontal list of options (delete, download)
+      const optionsContainer = document.createElement('div');
+      optionsContainer.classList.add('document-container-options'); 
+
+      // Create Delete Icon Image
+      const deleteIcon = document.createElement('img');
+      deleteIcon.src = 'images/action-trash.png'; // Update with the correct path
+      deleteIcon.alt = 'Delete';
+      deleteIcon.classList.add('icon-delete');
+
+      // Create Download Icon Image
+      const downloadIcon = document.createElement('img');
+      downloadIcon.src = 'images/action-download.png'; // Update with the correct path
+      downloadIcon.alt = 'Download';
+      downloadIcon.classList.add('icon-download');
+      downloadIcon.addEventListener('click', (event) => {
+        const docId = doc.id;
+        const documentData = this._documentsData.find((d) => d.id === docId);
+        const pageNumbers = documentData.pages.map((page) => page.pageNumber);
+        this.eventBus.dispatch('document-container-download', { source: this, docId, pageNumbers });
+      });
+
+      // Append SVG icons to the options container
+      optionsContainer.appendChild(deleteIcon);
+      optionsContainer.appendChild(downloadIcon);
+
+      // Append options container to the document container
+      docContainer.appendChild(optionsContainer);
+
       // Create a container for the thumbnails
       const thumbnailsContainer = document.createElement('div');
       thumbnailsContainer.classList.add('thumbnails-container');
       thumbnailsContainer.style.display = 'flex';
       thumbnailsContainer.style.flexWrap = 'wrap';
-      // thumbnailsContainer.style.gap = '10px';
-      thumbnailsContainer.style.marginTop = '15px'; // Add margin for spacing
       docContainer.appendChild(thumbnailsContainer);
 
       // For each page, create a thumbnail
@@ -508,6 +537,39 @@ class PDFThumbnailViewer {
         promises.push(promise);
       }
 
+      // STATUS AREA: Just a progress bar and a retry button
+      const statusContainer = document.createElement('div');
+      statusContainer.classList.add('document-status-container');
+
+      const progressBar = document.createElement('progress');
+      progressBar.classList.add('document-progress-bar');
+      progressBar.value = 0;
+      progressBar.max = 100;
+      progressBar.style.display = 'none';
+
+      const progressDescription = document.createElement('div');
+      progressDescription.classList.add('document-progress-description');
+      progressDescription.textContent = 'Extracting data...';
+      progressDescription.style.display = 'none';
+
+      const errorContainer = document.createElement('div');
+      errorContainer.classList.add('document-error-container');
+      errorContainer.style.display = 'none';
+      errorContainer.textContent = 'An error occurred extracting data. Please try again.';
+
+      const retryButton = document.createElement('button');
+      retryButton.textContent = 'Retry';
+      retryButton.addEventListener('click', async () => {
+        const docId = doc.id;
+        this.eventBus.dispatch('document-container-retry', { source: this, docId });
+      });
+
+      errorContainer.appendChild(retryButton);
+      statusContainer.appendChild(progressBar);
+      statusContainer.appendChild(progressDescription);
+      statusContainer.appendChild(errorContainer);
+      docContainer.appendChild(statusContainer);
+
       this.container.appendChild(docContainer);
 
       // Make the thumbnails container sortable
@@ -518,7 +580,7 @@ class PDFThumbnailViewer {
         chosenClass: 'sortable-chosen',
         onEnd: (evt) => {
           // Handle the drag and drop event
-          this.#onThumbnailDrop(evt);
+          this._onThumbnailDrop(evt);
         },
       });
     }
@@ -529,6 +591,72 @@ class PDFThumbnailViewer {
       // Dispatch an event indicating thumbnails are ready
       this.eventBus.dispatch('thumbnailsready', { source: this });
     });
+  }
+
+  #updateDocumentUI(docId) {
+    const docContainer = this.container.querySelector(`#${docId}`);
+    if (!docContainer) return;
+  
+    const { state, progress } = this._documentStates[docId];
+  
+    const progressBar = docContainer.querySelector('.document-progress-bar');
+    const progressDescription = docContainer.querySelector('.document-progress-description');
+    const errorContainer = docContainer.querySelector('.document-error-container');
+  
+    switch (state) {
+      case 'none':
+      case 'done':
+        // Hide progress bar and error container
+        if (progressBar) progressBar.style.display = 'none';
+        if (progressDescription) progressDescription.style.display = 'none';
+        if (errorContainer) errorContainer.style.display = 'none';
+        break;
+  
+      case 'processing':
+        // Show progress bar, hide error container
+        if (progressBar) {
+          progressBar.style.display = 'inline-block';
+          progressDescription.style.display = 'inline-block';
+          progressBar.value = progress;
+        }
+        if (errorContainer) errorContainer.style.display = 'none';
+        break;
+  
+      case 'error':
+        // Show error container with retry, hide progress bar
+        if (progressBar) progressBar.style.display = 'none';
+        if (progressDescription) progressDescription.style.display = 'none';
+        if (errorContainer) errorContainer.style.display = 'inline-block';
+        break;
+    }
+  
+    // Optionally add state classes to docContainer for styling
+    docContainer.classList.remove('state-none', 'state-processing', 'state-done', 'state-error');
+    docContainer.classList.add(`state-${state}`);
+  }
+
+  setDocumentState(docId, state) {
+    if (!this._documentStates[docId]) return;
+    this._documentStates[docId].state = state;
+    this.#updateDocumentUI(docId);
+  }
+  
+  setDocumentProgress(docId, progressValue) {
+    if (!this._documentStates[docId]) return;
+    this._documentStates[docId].progress = progressValue;
+    this.#updateDocumentUI(docId);
+  }
+
+  setDocumentResult(docId, result) {
+    this._documentStates[docId].result = result;
+  }
+
+  #displayDocumentForm(docId) {
+    if (!this._documentStates[docId]) return;
+    const result = this._documentStates[docId].result;
+    if (result) {
+      document.getElementById('rightSidebarContent').innerHTML = result;
+    }
   }
 
   // Function to generate a unique ID (you can customize this logic)
@@ -623,15 +751,23 @@ class PDFThumbnailViewer {
       chosenClass: 'sortable-chosen',
       onEnd: (evt) => {
         // Handle the drag and drop event
-        this.#onThumbnailDrop(evt);
+        this._onThumbnailDrop(evt);
       },
     });
 
     scrollIntoView(docContainer, { top: THUMBNAIL_SCROLL_MARGIN });
   }
 
-  #onDeleteThumbnail(evt) {
-    console.log(">> onDelete _thumbnails length: " + this._thumbnails.length);
+  _onSelectThumbnail(evt) {
+    const { source, id } = evt;
+    const thumbnail = source;
+    const docContainer = thumbnail.div.closest('.document-container');
+    const docId = docContainer.id;
+
+    this.#displayDocumentForm(docId);
+  }
+
+  _onDeleteThumbnail(evt) {
     const { source, id } = evt;
     const thumbnail = source;
   
@@ -686,7 +822,7 @@ class PDFThumbnailViewer {
     });
   }
 
-  async #onDownloadPage(evt) {
+  async _onDownloadPage(evt) {
     const { source, id } = evt;
     const pageNumber = source.pageNumber;
     try {
@@ -715,7 +851,7 @@ class PDFThumbnailViewer {
     }
   }
 
-  #onThumbnailDrop(evt) {
+  _onThumbnailDrop(evt) {
     const { item, from, to, oldIndex, newIndex } = evt;
 
     // Get the source and destination document containers
@@ -856,6 +992,68 @@ class PDFThumbnailViewer {
     a.download = 'modified.pdf';
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  animateDocumentProgress(docId, current, target, durationInSeconds) {
+    return new Promise((resolve) => {
+      const startTime = Date.now();
+      const duration = durationInSeconds * 1000;
+      let rafId;
+  
+      const update = () => {
+        const elapsed = Date.now() - startTime;
+        let percentage = current + ((target - current) * elapsed) / duration;
+  
+        if (percentage >= target) {
+          percentage = target;
+          this.setDocumentProgress(docId, percentage);
+          resolve();
+          return;
+        }
+  
+        this.setDocumentProgress(docId, percentage);
+        rafId = requestAnimationFrame(update);
+      };
+  
+      rafId = requestAnimationFrame(update);
+    });
+  }
+
+  simulateDocumentProgress(docId, startPercentage, maxPercentage, durationInSeconds, control) {
+    return new Promise((resolve) => {
+      const startTime = Date.now();
+      const duration = durationInSeconds * 1000;
+      let rafId;
+  
+      const update = () => {
+        // If an accelerate signal is triggered, animate the last chunk quickly to 100% and resolve.
+        if (control.accelerate) {
+          this.animateDocumentProgress(docId, maxPercentage, 100, 0.5)
+            .then(resolve)
+            .catch((err) => {
+              console.error('Error accelerating document progress:', err);
+              resolve();
+            });
+          return;
+        }
+  
+        const elapsed = Date.now() - startTime;
+        // Calculate progress from startPercentage up to maxPercentage
+        let percentage = startPercentage + ((maxPercentage - startPercentage) * elapsed) / duration;
+        if (percentage >= maxPercentage) {
+          percentage = maxPercentage;
+          // We’ve hit our max — let's stop here (but do not resolve yet, we'll wait for an accelerate).
+        } 
+  
+        // Update the PDFThumbnailViewer's progress for this doc
+        this.setDocumentProgress(docId, percentage);
+  
+        // Continue the animation
+        rafId = requestAnimationFrame(update);
+      };
+  
+      rafId = requestAnimationFrame(update);
+    });
   }
 }
 

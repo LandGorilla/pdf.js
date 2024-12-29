@@ -19,6 +19,7 @@
 // eslint-disable-next-line max-len
 /** @typedef {import("../src/display/api.js").PDFDocumentLoadingTask} PDFDocumentLoadingTask */
 
+import { PDFDocument } from 'https://cdn.jsdelivr.net/npm/pdf-lib/+esm';
 import {
   animationStarted,
   apiPageLayoutToViewerModes,
@@ -90,6 +91,7 @@ import { SecondaryToolbar } from "web-secondary_toolbar";
 import { Toolbar } from "web-toolbar";
 import { ViewHistory } from "./view_history.js";
 import { PDFRightSidebar } from './pdf_rightsidebar.js';
+import { ConcurrencyQueue } from './concurrency_queue.js';
 
 const FORCE_PAGES_LOADED_TIMEOUT = 10000; // ms
 
@@ -98,6 +100,13 @@ const ViewOnLoad = {
   PREVIOUS: 0, // Default value.
   INITIAL: 1,
 };
+
+const ViewType = Object.freeze({
+  NORMAL: 'NORMAL',
+  GROUPED: 'GROUPED',
+});
+
+const API_URL = 'http://localhost:8083'; //'https://research.landgorilla.dev';
 
 const PDFViewerApplication = {
   initialBookmark: document.location.hash.substring(1),
@@ -184,6 +193,7 @@ const PDFViewerApplication = {
   _caretBrowsing: null,
   _isScrolling: false,
   accessToken: null,
+  viewState: ViewType.NORMAL,
 
   // Called once when the document is loaded.
   async initialize(appConfig) {
@@ -493,28 +503,6 @@ const PDFViewerApplication = {
     pdfScriptingManager.setViewer(pdfViewer);
 
     if (appConfig.sidebar?.thumbnailView) {
-      const documentsResponse = [
-        {
-            "document": "Progress Billing",
-            "pages": [1, 2, 3]
-        },
-        {
-            "document": "Unconditional Waiver and Release Upon Progress Payment",
-            "pages": [4]
-        },
-        {
-            "document": "Conditional Waiver and Release Upon Progress Payment",
-            "pages": [5]
-        },
-        {
-            "document": "Job Cost Summary",
-            "pages": [6, 7, 8, 9, 10, 11]
-        },
-        {
-            "document": "Unconditional Waiver and Release on Progress Payment",
-            "pages": [12, 13, 14]
-        }
-      ];
       this.pdfThumbnailViewer = new PDFThumbnailViewer({
         container: appConfig.sidebar.thumbnailView,
         eventBus,
@@ -522,8 +510,7 @@ const PDFViewerApplication = {
         linkService: pdfLinkService,
         pageColors,
         abortSignal: this._globalAbortController.signal,
-        enableHWA,
-        documentsResponse
+        enableHWA
       });
       pdfRenderingQueue.setThumbnailViewer(this.pdfThumbnailViewer);
     }
@@ -707,6 +694,8 @@ const PDFViewerApplication = {
       rightSidebarContainer,
       rightSidebarResizer
     });
+
+    this.refreshOptions();
   },
 
   async run(config) {
@@ -1185,6 +1174,19 @@ const PDFViewerApplication = {
     this.pdfThumbnailViewer?.addNewEmptyDocumentContainer();
   },
 
+  refreshOptions() {
+    switch (this.viewState) {
+      case ViewType.NORMAL:
+        document.getElementById("classify-documents-button").style.display = "block";
+        document.getElementById("open-sidebar-options").style.display = "none";
+        break;
+      case ViewType.GROUPED:
+        document.getElementById("classify-documents-button").style.display = "none";
+        document.getElementById("open-sidebar-options").style.display = "block";
+        break;
+    }
+  },
+
   async searchDocumentsInFile() {
     if (!this.pdfDocument) {
       return;
@@ -1208,7 +1210,6 @@ const PDFViewerApplication = {
         formData.append('file', pdfFile);
 
         const token = this.accessToken;
-        const API_URL = 'http://localhost:8083'; //'https://research.landgorilla.dev';
         const response = await fetch(
           `${API_URL}/v1/vertex-ai/pdf-analyzer/classify`,
           {
@@ -1222,9 +1223,13 @@ const PDFViewerApplication = {
         if (!response.ok) {
           throw new Error(`HTTP error! Status: ${response.status}`);
         }
-    
+        
+        this.viewState = ViewType.GROUPED;
+
         const data = await response.json();
         this.pdfThumbnailViewer?.setDocumentsData(data);
+
+        this.refreshOptions();
 
         // Signal to accelerate the progress bar to 100%
         control.accelerate = true;
@@ -1238,6 +1243,168 @@ const PDFViewerApplication = {
       console.error('Error fetching data:', error);
       this.hideLoading();
     }
+  },
+
+  async extractPagesFromPdf(pagesToExtract) {
+    const pdfBytes = await this.pdfDocument.getData();
+    const originalPdf = await PDFDocument.load(pdfBytes);
+    const totalPages = originalPdf.getPageCount();
+    const invalidPages = pagesToExtract.filter(page => page < 1 || page > totalPages);
+    if (invalidPages.length > 0) {
+      throw new Error(`Invalid page numbers: ${invalidPages.join(', ')}. The PDF has ${totalPages} pages.`);
+    }
+  
+    const newPdf = await PDFDocument.create();
+    const pagesZeroBased = pagesToExtract.map(pageNumber => pageNumber - 1);
+    const copiedPages = await newPdf.copyPages(originalPdf, pagesZeroBased);
+    copiedPages.forEach(page => newPdf.addPage(page));
+  
+    const newPdfBytes = await newPdf.save();
+    const pdfBlob = new Blob([newPdfBytes], { type: 'application/pdf' });
+    return pdfBlob;
+  },
+
+  async extractDataFromDocument() {
+    const pages = this.getCurrentDocumentsAndPages();
+    console.log("Current documents and their pages:", JSON.stringify(pages, null, 2));
+  
+    try {
+  
+      const queue = new ConcurrencyQueue(3);
+  
+      for (const docData of pages) {
+        const docId = docData.docId;
+        this.pdfThumbnailViewer?.setDocumentState(docId, 'processing');
+        this.pdfThumbnailViewer?.setDocumentProgress(docId, 0);
+
+        const task = async () => {
+          return this.processDocument(docId, docData);
+        };
+
+        const wrappedTask = () =>
+          task()
+            .then(result => {
+              // The doc is already set to 'done' inside `processDocument`
+              return result;
+            })
+            .catch(error => {
+              // We set doc to 'error' inside `processDocument` as well
+              // But any additional logging or fallback can happen here.
+              console.error(`Error in wrappedTask for doc ${docId}:`, error);
+              return null; // Or re-throw if desired.
+            });
+  
+        queue.addTask(wrappedTask);
+      }
+  
+      // Run all tasks in the queue with concurrency=2
+      const results = await queue.run();
+      console.log('All documents have been analyzed:', results);
+  
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    }
+  },
+
+  async processDocument(docId, docData) {
+    // Mark the document as "processing" and reset progress
+    this.pdfThumbnailViewer?.setDocumentState(docId, 'processing');
+    this.pdfThumbnailViewer?.setDocumentProgress(docId, 0);
+  
+    // Start simulating progress from 0% -> 90% over 5 seconds
+    const control = { accelerate: false };
+    const progressSimPromise = this.pdfThumbnailViewer?.simulateDocumentProgress(
+      docId,
+      0,
+      90,
+      5, // durationInSeconds, adjust as needed
+      control
+    );
+  
+    try {
+      // Extract pages, create partial PDF
+      const newPdfBlob = await this.extractPagesFromPdf(docData.pages);
+      const newPdfFile = new File([newPdfBlob], 'file.pdf', { type: 'application/pdf' });
+      // Optionally show partial progress at 50%
+      this.pdfThumbnailViewer?.setDocumentProgress(docId, 50);
+  
+      // Prepare form data
+      const formData = new FormData();
+      formData.append('file', newPdfFile);
+  
+      const docTypeElement = document.querySelector(`#doc-type-${docId}`);
+      const docTypeValue = docTypeElement ? docTypeElement.value : '';
+      formData.append('doc_type', docTypeValue);
+  
+      // Call your endpoint
+      const token = this.accessToken;
+      const response = await fetch(`${API_URL}/v1/vertex-ai/pdf-analyzer/extract`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+  
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+  
+      // Parse the result from server
+      const result = await response.text();
+  
+      // Update progress to ~90% if needed
+      this.pdfThumbnailViewer?.setDocumentProgress(docId, 90);
+      this.pdfThumbnailViewer?.setDocumentResult(docId, result);
+  
+      // Now accelerate to 100%
+      control.accelerate = true;
+      await progressSimPromise; // Wait for that final jump
+  
+      // Mark doc as done
+      this.pdfThumbnailViewer?.setDocumentState(docId, 'done');
+      return result;
+  
+    } catch (error) {
+      console.error(`Error processing doc ${docId}:`, error);
+      this.pdfThumbnailViewer?.setDocumentState(docId, 'error');
+  
+      // Accelerate to 100% (optional: you could also stop at e.g. 50%)
+      control.accelerate = true;
+      await progressSimPromise;
+      throw error;
+    }
+  },
+
+  getCurrentDocumentsAndPages() {
+    const result = [];
+    const container = this.pdfThumbnailViewer?.container;
+    const thumbnails = this.pdfThumbnailViewer?._thumbnails;
+    const docContainers = container.querySelectorAll('.document-container');
+  
+    for (const docContainer of docContainers) {
+      const docId = docContainer.id;
+  
+      // Find the thumbnails container within this docContainer
+      const thumbnailsContainer = docContainer.querySelector('.thumbnails-container');
+      if (!thumbnailsContainer) {
+        // No thumbnails for this document container
+        result.push({ docId, pages: [] });
+        continue;
+      }
+  
+      const thumbnailDivs = thumbnailsContainer.querySelectorAll('.thumbnail');
+      const pages = [];
+  
+      for (const thumbDiv of thumbnailDivs) {
+        const thumbnail = thumbnails.find(thumb => thumb.id === thumbDiv.id);
+        if (thumbnail) {
+          pages.push(thumbnail.pageNumber);
+        }
+      }
+  
+      result.push({ docId, pages });
+    }
+  
+    return result;
   },
 
   updateProgress(percentage) {
@@ -2037,6 +2204,8 @@ const PDFViewerApplication = {
       preferences,
     } = this;
 
+    eventBus._on("document-container-download", onDocumentContainerDownload.bind(this), opts);
+    eventBus._on("document-container-retry", onDocumentContainerRetry.bind(this), opts);
     eventBus._on("resize", onResize.bind(this), opts);
     eventBus._on("hashchange", onHashchange.bind(this), opts);
     eventBus._on("beforeprint", this.beforePrint.bind(this), opts);
@@ -2156,8 +2325,9 @@ const PDFViewerApplication = {
       );
     }
 
-    document.getElementById("search-documents-in-file").addEventListener("click", this.searchDocumentsInFile.bind(this));
+    document.getElementById("classify-documents-button").addEventListener("click", this.searchDocumentsInFile.bind(this));
     document.getElementById("create-document-container-button").addEventListener("click", this.createDocumentContainer.bind(this));
+    document.getElementById("extract-data-from-documents").addEventListener("click", this.extractDataFromDocument.bind(this));
 
     this.bindDropdownEvents();
   },
@@ -2662,6 +2832,36 @@ function onViewerModesChanged(name, evt) {
       // Unable to write to storage.
     });
   }
+}
+
+async function onDocumentContainerRetry({ source, docId }) {
+  try {
+    const docsAndPages = this.getCurrentDocumentsAndPages();
+    const docData = docsAndPages.find(d => d.docId === docId);
+    if (!docData) {
+      console.error(`No document found for docId: ${docId}`);
+      return;
+    }
+
+    await this.processDocument(docId, docData);
+
+    console.log(`Retry for document ${docId} finished successfully.`);
+  } catch (error) {
+    console.error(`Retry for document ${docId} failed:`, error);
+  }
+}
+
+async function onDocumentContainerDownload({ source, docId, pageNumbers }) {
+  const blob = await PDFViewerApplication.extractPagesFromPdf(pageNumbers);
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `page-extracted_pages.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function onResize() {
@@ -3384,4 +3584,4 @@ function beforeUnload(evt) {
   return false;
 }
 
-export { PDFViewerApplication };
+export { PDFViewerApplication, ViewType };

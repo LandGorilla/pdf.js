@@ -375,8 +375,6 @@ class Toolbar {
   }
 
   #onPageInfoChanged({pageNumber, totalPages}) {
-    console.log(">>> pageNumber: " + pageNumber);
-    console.log(">>> totalPages: " + totalPages);
     this.setPageNumber(pageNumber, pageNumber);
     this.setPagesCount(totalPages, false);
   }

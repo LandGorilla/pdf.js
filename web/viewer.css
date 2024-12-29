@@ -137,7 +137,7 @@
 
 
   /* Right Sidebar Variables */
-  --right-sidebar-width: 245px;
+  --right-sidebar-width: 420px;
   --right-sidebar-transition-duration: 200ms;
   --right-sidebar-transition-timing-function: ease;
 }
@@ -1791,6 +1791,7 @@ dialog :link {
   overflow: visible;
   border: 1px dashed #6F6F73;
   border-radius: 10px;
+  margin-top: 5px;
   min-height: 150px;
 }
 
@@ -1894,6 +1895,14 @@ dialog :link {
 }
 
 /* Sidebar actions */
+#open-sidebar-options {
+  
+}
+
+#classify-documents-button {
+  color: white;
+}
+
 #sidebar-left-actions {
   background-color: var(--toolbar-bg-color);
   display: flex;
@@ -2087,17 +2096,14 @@ dialog :link {
 /* Position and style the right sidebar container */
 #rightSidebarContainer {
   position: absolute;
-  inset-block: 0 0;
-  inset-inline-end: calc(-1 * var(--right-sidebar-width));
+  top: 0;
+  bottom: 0;
+  right: 0;
+  /* background-color: blue; */
+  /* right: calc(-1 * var(--right-sidebar-width)); */
   width: var(--right-sidebar-width);
-  visibility: hidden;
-  z-index: 1;
-  font: message-box;
-  border-top: 1px solid transparent;
-  border-inline-start: var(--doorhanger-border-color-whcm);
-  transition-property: inset-inline-end;
-  transition-duration: var(--right-sidebar-transition-duration);
-  transition-timing-function: var(--right-sidebar-transition-timing-function);
+  overflow: auto; /* Internal scrolling for its content */
+  transition: right var(--right-sidebar-transition-duration) var(--right-sidebar-transition-timing-function);
 }
 
 /* When the right sidebar is open, slide it into view */
@@ -2112,13 +2118,25 @@ dialog :link {
   inset-block: var(--toolbar-height) 0;
   width: 100%;
   box-shadow: inset 1px 0 0 rgb(0 0 0 / 0.25);
+  padding: 40px;
+}
+
+#rightSidebarContent, 
+#rightSidebarContent *::before, 
+#rightSidebarContent *::after {
+    box-sizing: border-box;
+}
+
+#rightSidebarContent h1 {
+  font-size: 20px;
+  color: white;
 }
 
 /* Resizer for the right sidebar */
 #rightSidebarResizer {
   position: absolute;
   inset-block: 0;
-  inset-inline-start: -6px;
+  inset-inline-start: 0px;
   width: 6px;
   z-index: 200;
   cursor: ew-resize;
@@ -2134,4 +2152,131 @@ dialog :link {
 #outerContainer.sidebarResizingRight #mainContainer,
 #outerContainer.sidebarResizingRight #rightSidebarContainer {
   transition-duration: 0s;
+}
+
+#outerContainer #viewerContainer {
+  left: var(--sidebar-width);
+  width: calc(100% - var(--sidebar-width) - var(--right-sidebar-width));
+}
+
+/* Document container */
+/* Options Container */
+.document-container-options {
+  display: flex;
+  justify-content: flex-end;
+  gap: 15px;
+  margin-top: 20px;
+}
+
+.document-container-options img {
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+}
+
+/* Hover Effects */
+.document-container-options img:hover {
+  opacity: 0.8;
+  background-color: gray;
+}
+
+.document-container-options img:focus {
+  outline: none;
+  opacity: 0.8;
+}
+
+
+/* Document Form Container */
+.document-form-container {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  overflow: visible;
+  font: message-box;
+  color: white;
+}
+
+.document-form-container h1 {
+  width: 100%;
+}
+
+/* Styles for labels */
+.document-form-container label {
+  display: block;
+  color: white;
+  font-weight: bold;
+  margin-top: 10px;
+  font-size: 12px;
+  width: 100%;
+}
+
+/* Styles for input fields and select elements */
+.document-form-container input,
+.document-form-container select {
+  width: 100%;
+  background-color: #333;
+  color: white;
+  border: 1px solid #555;
+  padding: 5px;
+  margin-top: 5px;
+  font-size: 12px !important;
+}
+
+/* Style for placeholder text in inputs */
+.document-form-container input::placeholder {
+  color: #ccc;
+}
+
+.document-field {
+  margin-bottom: 20px;
+}
+
+.document-progress-description {
+  font-size: 12px;
+  color: white;
+  width: 100%;
+}
+
+.document-progress-bar {
+  border: none;
+  height: 6px;
+  width: 100%;
+}
+
+/* For Chrome / Safari / WebKit */
+.document-progress-bar::-webkit-progress-bar {
+  background-color: gray;
+  border-radius: 5px;
+}
+
+.document-progress-bar::-webkit-progress-value {
+  background-color: #fff;
+  border-radius: 5px;
+}
+
+/* For Firefox */
+.document-progress-bar::-moz-progress-bar {
+  background-color: gray;
+  border-radius: 5px;
+}
+
+.document-error-container {
+  font-size: 12px !important;
+  color: white;
+  width: 100%;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  font: message-box;
+}
+
+.document-error-container button {
+  font-size: 14px !important;
+  background-color: gray;
+  color: white;
+  display: block;
+  border: none;
+  border-radius: 5px;
+  padding: 5px 5px;
+  margin-top: 5px;
+  font: message-box;
 }

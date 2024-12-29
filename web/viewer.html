@@ -135,18 +135,20 @@ See https://github.com/adobe-type-tools/cmap-resources
             <div id="left-download-button" class="button sidebar-left-action">
               <img src="images/download.svg" alt="Download" width="24" height="24">
             </div>
-            <div id="open-sidebar-options" class="button sidebar-left-action dropdown">
+            <div id="classify-documents-button">
+              Search for Documents in File
+            </div>
+            <div id="open-sidebar-options" class="button dropdown">
               <img class="dropdown-action" data-target="#dropright" src="images/chevrons-right.svg" alt="Open Options" width="24" height="24">
               <div class="drop-menu dropright" id="dropright">
-                <div class="dropdown-item has-submenu">
+                <!-- <div class="dropdown-item has-submenu">
                   <a href="#">Intelligent Document Processing</a>
                   <div class="drop-menu submenu">
                     <a id="search-documents-in-file" href="#">Search for Documents in File</a>
                     <a href="#">Extract Data from Documents</a>
                   </div>
-                </div>
-                <a href="#">Delete Selected Document</a>
-                <a href="#">Insert Document Container</a>
+                </div> -->
+                <a id="extract-data-from-documents" href="#">Extract Data from Documents</a>
                 <a href="#">Download All Documents</a>
                 <a href="#">Download Selected Documents</a>
                 <a href="#">Download Selected to Document Center</a>
@@ -481,7 +483,7 @@ See https://github.com/adobe-type-tools/cmap-resources
         </div>
       </div> <!-- mainContainer -->
 
-      <div id="rightSidebarContainer" class="PDFRightSidebar">
+      <div id="rightSidebarContainer" class="PDFRightSidebar" style="display: block;">
         <div id="rightSidebarContent"></div>
         <div id="rightSidebarResizer"></div>
       </div>
