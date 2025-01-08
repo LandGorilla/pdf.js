@@ -87,7 +87,7 @@ class PDFThumbnailViewer {
     );
     this.#resetView();
 
-    this.eventBus._on('thumbnail-delete', this._onDeleteThumbnail.bind(this));
+    // this.eventBus._on('thumbnail-delete', this._onDeleteThumbnail.bind(this));
     this.eventBus._on('thumbnail-download', this._onDownloadPage.bind(this));
     this.eventBus._on('thumbnail-click', this._onSelectThumbnail.bind(this));
   }
@@ -107,10 +107,10 @@ class PDFThumbnailViewer {
   setDocumentsData(response) {
     this.#resetView();
     
-    this._documentsData = this.initializeDocuments(response.result);
+    this.documentsData = this.initializeDocuments(response.result);
     this._documenTypes = response.document_types;
 
-    for (const doc of this._documentsData) {
+    for (const doc of this.documentsData) {
       this._documentStates[doc.id] = {
         state: 'none',
         progress: 0,
@@ -271,7 +271,12 @@ class PDFThumbnailViewer {
   /**
    * @param {PDFDocumentProxy} pdfDocument
    */
-  setDocument(pdfDocument) {
+  setDocument(pdfDocument, args={}) {
+    if (args.needsThumbnailsRefresh) {
+      this.pdfDocument = pdfDocument;
+      return;
+    }
+
     if (this.pdfDocument) {
       this.#cancelRendering();
       this.#resetView();
@@ -280,6 +285,37 @@ class PDFThumbnailViewer {
     this.pdfDocument = pdfDocument;
     if (!pdfDocument) {
       return;
+    }
+
+    let documentsResponse = args.documentsResponse;
+    if (documentsResponse && args.flatPages) {
+      const oldToNew = {};
+      args.flatPages.forEach((oldPage, i) => {
+        oldToNew[oldPage] = i + 1;  // new PDF pages are 1-based
+      });
+
+      documentsResponse.result.forEach(doc => {
+        doc.pages = doc.pages.map(oldPageNum => oldToNew[oldPageNum]);
+      });
+
+      this.setDocumentsData(documentsResponse);
+    }
+
+    if (args.documentsData && args.flatPages) {
+    //   const oldToNew = {};
+    //   args.flatPages.forEach((oldPage, i) => {
+    //     oldToNew[oldPage] = i + 1;  // new PDF pages are 1-based
+    //   });
+    
+    //   args.documentsData.forEach(doc => {
+    //     doc.pages.forEach(pageObj => {
+    //       // pageObj.pageNumber = oldToNew[pageObj.pageNumber];
+    //     });
+    //   });
+    
+      this.#resetView();
+      this.documentsData = args.documentsData;
+      this.#renderDocumentContainers();
     }
 
     const firstPagePromise = pdfDocument.getPage(1);
@@ -418,7 +454,7 @@ class PDFThumbnailViewer {
 
     const promises = [];
 
-    for (const doc of this._documentsData) {
+    for (const doc of this.documentsData) {
       // Create a container for the document
       const docContainer = document.createElement('div');
       docContainer.classList.add('document-container');
@@ -491,7 +527,7 @@ class PDFThumbnailViewer {
       downloadIcon.classList.add('icon-download');
       downloadIcon.addEventListener('click', (event) => {
         const docId = doc.id;
-        const documentData = this._documentsData.find((d) => d.id === docId);
+        const documentData = this.documentsData.find((d) => d.id === docId);
         const pageNumbers = documentData.pages.map((page) => page.pageNumber);
         this.eventBus.dispatch('document-container-download', { source: this, docId, pageNumbers });
       });
@@ -654,8 +690,11 @@ class PDFThumbnailViewer {
   #displayDocumentForm(docId) {
     if (!this._documentStates[docId]) return;
     const result = this._documentStates[docId].result;
+    const rightPanelContent = document.getElementById('rightSidebarContent')
     if (result) {
-      document.getElementById('rightSidebarContent').innerHTML = result;
+      rightPanelContent.innerHTML = result;
+    } else {
+      rightPanelContent.innerHTML = "";
     }
   }
 
@@ -674,8 +713,8 @@ class PDFThumbnailViewer {
       pages: [],           // Empty pages array
     };
 
-    // Insert the new document at the beginning of _documentsData
-    this._documentsData.unshift(newDoc);
+    // Insert the new document at the beginning of documentsData
+    this.documentsData.unshift(newDoc);
 
     // Create a new document container and insert it at the beginning of the container
     const docContainer = document.createElement('div');
@@ -767,9 +806,49 @@ class PDFThumbnailViewer {
     this.#displayDocumentForm(docId);
   }
 
-  _onDeleteThumbnail(evt) {
+  async _onDeleteThumbnail(evt) {
     const { source, id } = evt;
     const thumbnail = source;
+
+    // 1) Log the thumbnail ID.
+    console.log("Deleting thumbnail with id:", thumbnail.id);
+    
+    // 2) Check each document in documentsData.
+    for (const doc of this.documentsData) {
+      console.log("Checking doc:", doc.id, "with pages:", doc.pages);
+
+      // 3) Print the IDs in doc.pages as well.
+      console.log("Page IDs in this doc:", doc.pages.map(p => p.id));
+
+      const pageIndex = doc.pages.findIndex((page) => {
+        console.log("Comparing page.id:", page.id, "with thumbnail.id:", thumbnail.id);
+        return page.id === thumbnail.id;
+      });
+
+      console.log("Resulting pageIndex:", pageIndex);
+
+      if (pageIndex !== -1) {
+        // If we actually found the page, splice it out.
+        console.log("Splicing out page at index:", pageIndex, "from doc:", doc.id);
+        doc.pages.splice(pageIndex, 1);
+
+        // Now confirm it’s removed.
+        console.log("Pages after splice:", doc.pages.map(p => p.id));
+
+        // Handle empty documents
+        // if (doc.pages.length === 0) {
+        //   console.log("Document is now empty. Removing it completely:", doc.id);
+        //   const docIndex = this.documentsData.indexOf(doc);
+        //   if (docIndex !== -1) {
+        //     this.documentsData.splice(docIndex, 1);
+        //     console.log("Removed entire doc from documentsData. Current docs:", this.documentsData);
+        //   }
+        // }
+
+        // Break out of the loop once we've found our page.
+        break;
+      }
+    }
   
     // Remove the thumbnail's DOM element
     thumbnail.div.remove();
@@ -780,30 +859,29 @@ class PDFThumbnailViewer {
       this._thumbnails.splice(thumbIndex, 1);
     }
   
-    const docContainer = thumbnail.div.closest('.document-container');
+    // const docContainer = thumbnail.div.closest('.document-container');
+    // if (docContainer) {
+    //   // We are in document container mode
+    //   // Remove the page from documentsData
+    //   for (const doc of this.documentsData) {
+    //     const pageIndex = doc.pages.findIndex((page) => page.id === thumbnail.id);
+    //     if (pageIndex !== -1) {
+    //       doc.pages.splice(pageIndex, 1);
   
-    if (docContainer) {
-      // We are in document container mode
-      // Remove the page from _documentsData
-      for (const doc of this._documentsData) {
-        const pageIndex = doc.pages.findIndex((page) => page.id === thumbnail.id);
-        if (pageIndex !== -1) {
-          doc.pages.splice(pageIndex, 1);
-  
-          // Handle empty documents
-          if (doc.pages.length === 0) {
-            if (docContainer) {
-              docContainer.remove();
-            }
-            const docIndex = this._documentsData.indexOf(doc);
-            if (docIndex !== -1) {
-              this._documentsData.splice(docIndex, 1);
-            }
-          }
-          break;
-        }
-      }
-    }
+    //       // Handle empty documents
+    //       if (doc.pages.length === 0) {
+    //         if (docContainer) {
+    //           docContainer.remove();
+    //         }
+    //         const docIndex = this.documentsData.indexOf(doc);
+    //         if (docIndex !== -1) {
+    //           this.documentsData.splice(docIndex, 1);
+    //         }
+    //       }
+    //       break;
+    //     }
+    //   }
+    // }
   
     // Update page numbers
     this.#updatePageNumbers();
@@ -815,11 +893,37 @@ class PDFThumbnailViewer {
     const newTotalPages = this._thumbnails.length;
     const newPageNumber = Math.min(this._currentPageNumber, newTotalPages) || 1;
 
-    this.eventBus.dispatch('pageinfochanged', {
-      source: this,
-      pageNumber: newPageNumber,
-      totalPages: newTotalPages,
-    });
+    // this.eventBus.dispatch('pageinfochanged', {
+    //   source: this,
+    //   pageNumber: newPageNumber,
+    //   totalPages: newTotalPages,
+    // });
+
+    const newOrderedPages = this.documentsData
+      .flatMap(doc => doc.pages)
+      .map(p => p.pageNumber); 
+
+    const newPDFUrl = await this.generateNewPDF(newOrderedPages);
+    this.eventBus.dispatch('thumbnail-reordered', { source: this, newPDFUrl, documentsData: this.documentsData, flatPages: newOrderedPages });
+  }
+
+  async _generatePDF(evt) {
+    const { source, id } = evt;
+    const pageNumber = source.pageNumber;
+    try {
+      const originalPdfBytes = await this.pdfDocument.getData();
+      const originalPdf = await PDFDocument.load(originalPdfBytes);
+      const pdfDoc = await PDFDocument.create();
+
+      // Copy the specified page into the new PDF
+      const [copiedPage] = await pdfDoc.copyPages(originalPdf, [pageNumber - 1]);
+      pdfDoc.addPage(copiedPage);
+
+      const pdfBytes = await pdfDoc.save();
+      
+    } catch (error) {
+      console.error('Error downloading page as PDF:', error);
+    }
   }
 
   async _onDownloadPage(evt) {
@@ -851,44 +955,58 @@ class PDFThumbnailViewer {
     }
   }
 
-  _onThumbnailDrop(evt) {
+  async _onThumbnailDrop(evt) {
     const { item, from, to, oldIndex, newIndex } = evt;
-
+  
     // Get the source and destination document containers
     const fromDocContainer = from.closest('.document-container');
     const toDocContainer = to.closest('.document-container');
-
+  
     const fromDocId = fromDocContainer.id;
     const toDocId = toDocContainer.id;
-
-    const fromDocIndex = this._documentsData.findIndex(
+  
+    console.log(
+      `Dragging from docId=${fromDocId} to docId=${toDocId}, 
+      oldIndex=${oldIndex}, newIndex=${newIndex}`
+    );
+  
+    const fromDocIndex = this.documentsData.findIndex(
       (doc) => doc.id === fromDocId
     );
-    const toDocIndex = this._documentsData.findIndex(
+    const toDocIndex = this.documentsData.findIndex(
       (doc) => doc.id === toDocId
     );
-
-    const fromDoc = this._documentsData[fromDocIndex];
-    const toDoc = this._documentsData[toDocIndex];
-
+  
+    const fromDoc = this.documentsData[fromDocIndex];
+    const toDoc = this.documentsData[toDocIndex];
+  
     // Remove the page from the source document
     const [movedPage] = fromDoc.pages.splice(oldIndex, 1);
-
+    console.log(
+      `Removed page with id=${movedPage.id} from doc=${fromDoc.id}. 
+      fromDoc now has pages:`,
+      fromDoc.pages.map(p => p.pageNumber)
+    );
+  
     // Insert the page into the destination document
     toDoc.pages.splice(newIndex, 0, movedPage);
-
+    console.log(
+      `Inserted page with id=${movedPage.id} into doc=${toDoc.id} at index=${newIndex}. 
+      toDoc now has pages:`,
+      toDoc.pages.map(p => p.pageNumber)
+    );
+  
     // Update the _thumbnails array
     const movedThumbnailIndex = this._thumbnails.findIndex(
       (thumb) => thumb.id === movedPage.id
     );
     const [movedThumbnail] = this._thumbnails.splice(movedThumbnailIndex, 1);
-
+  
     // Find the insertion index in _thumbnails
     const toDocThumbnails = this._thumbnails.filter(
-      (thumb) =>
-        thumb.container.closest('.document-container').id === toDocId
+      (thumb) => thumb.container.closest('.document-container').id === toDocId
     );
-
+  
     let insertIndex;
     if (toDocThumbnails.length === 0) {
       // If the destination document has no thumbnails yet
@@ -901,32 +1019,45 @@ class PDFThumbnailViewer {
     } else {
       if (newIndex >= toDocThumbnails.length) {
         insertIndex =
-          this._thumbnails.indexOf(toDocThumbnails[toDocThumbnails.length - 1]) +
-          1;
+          this._thumbnails.indexOf(
+            toDocThumbnails[toDocThumbnails.length - 1]
+          ) + 1;
       } else {
         insertIndex = this._thumbnails.indexOf(toDocThumbnails[newIndex]);
       }
     }
-
+  
     this._thumbnails.splice(insertIndex, 0, movedThumbnail);
-
-    // Reassign page numbers to ensure they are sequential
-    for (const doc of this._documentsData) {
+  
+    // Reassign page numbers to ensure they are sequential (or keep original if desired)
+    for (const doc of this.documentsData) {
       for (let i = 0; i < doc.pages.length; i++) {
-        doc.pages[i].pageNumber = doc.pages[i].pageNumber; // Keep original page numbers
+        // doc.pages[i].pageNumber = i + 1; // Example if you wanted fully sequential
+        // or keep original pageNumber as you do in your code:
+        // doc.pages[i].pageNumber = doc.pages[i].pageNumber;
       }
     }
   
     // Update the pageNumber in thumbnails
-    for (const thumbnail of this._thumbnails) {
-      const page = this._documentsData
-        .flatMap((doc) => doc.pages)
-        .find((p) => p.id === thumbnail.id);
-      if (page) {
-        thumbnail.pageNumber = page.pageNumber;
-      }
+    // for (const thumbnail of this._thumbnails) {
+    //   const page = this.documentsData
+    //     .flatMap((doc) => doc.pages)
+    //     .find((p) => p.id === thumbnail.id);
+    //   if (page) {
+    //     thumbnail.pageNumber = page.pageNumber;
+    //   }
+    // }
+  
+    // Print final order of pages for each document container, for debugging
+    console.log("=== Final documentsData order after drop ===");
+    for (const doc of this.documentsData) {
+      console.log(
+        `Doc ${doc.id} pages:`,
+        doc.pages.map(p => p.pageNumber)
+      );
     }
-
+    console.log("============================================");
+  
     // Optionally, re-render the thumbnails if necessary
     this.renderingQueue.renderHighestPriority();
   }
@@ -944,14 +1075,14 @@ class PDFThumbnailViewer {
 
       case ViewType.GROUPED:
         let groupedPageNumber = 1;
-        for (const doc of this._documentsData) {
+        for (const doc of this.documentsData) {
           for (const page of doc.pages) {
             page.pageNumber = groupedPageNumber++;
           }
         }
 
         for (const thumbnail of this._thumbnails) {
-          const page = this._documentsData
+          const page = this.documentsData
             .flatMap((doc) => doc.pages)
             .find((p) => p.id === thumbnail.id);
           if (page) {
@@ -961,37 +1092,6 @@ class PDFThumbnailViewer {
         }
         break;
     }
-  }
-
-  /**
-   * Method to generate the modified PDF based on user changes.
-   * This method assumes you have included a PDF manipulation library like PDF-lib.
-   */
-  async generateModifiedPDF() {
-    const pdfDoc = await PDFLib.PDFDocument.create();
-    const originalPdfBytes = await this.pdfDocument.getData();
-    const originalPdf = await PDFLib.PDFDocument.load(originalPdfBytes);
-
-    for (const doc of this._documentsData) {
-      for (const page of doc.pages) {
-        const [copiedPage] = await pdfDoc.copyPages(
-          originalPdf,
-          [page.pageNumber - 1]
-        );
-        pdfDoc.addPage(copiedPage);
-      }
-    }
-
-    const pdfBytes = await pdfDoc.save();
-    // Trigger download or further processing
-    // For example:
-    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'modified.pdf';
-    a.click();
-    URL.revokeObjectURL(url);
   }
 
   animateDocumentProgress(docId, current, target, durationInSeconds) {

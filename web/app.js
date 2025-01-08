@@ -106,6 +106,11 @@ const ViewType = Object.freeze({
   GROUPED: 'GROUPED',
 });
 
+const EditorState = Object.freeze({
+  VIEW: 'VIEW',
+  EDIT: 'EDIT',
+});
+
 const API_URL = 'http://localhost:8083'; //'https://research.landgorilla.dev';
 
 const PDFViewerApplication = {
@@ -194,6 +199,7 @@ const PDFViewerApplication = {
   _isScrolling: false,
   accessToken: null,
   viewState: ViewType.NORMAL,
+  editorState: EditorState.VIEW,
 
   // Called once when the document is loaded.
   async initialize(appConfig) {
@@ -1091,7 +1097,7 @@ const PDFViewerApplication = {
 
     return loadingTask.promise.then(
       pdfDocument => {
-        this.load(pdfDocument);
+        this.load(pdfDocument, args);
       },
       reason => {
         if (loadingTask !== this.pdfLoadingTask) {
@@ -1185,6 +1191,15 @@ const PDFViewerApplication = {
         document.getElementById("open-sidebar-options").style.display = "block";
         break;
     }
+
+    switch (this.editorState) {
+      case EditorState.VIEW:
+        document.getElementById("apply-changes-button").style.display = "none";
+        break;
+      case EditorState.EDIT:
+        document.getElementById("apply-changes-button").style.display = "block";
+        break;
+    }
   },
 
   async searchDocumentsInFile() {
@@ -1227,7 +1242,24 @@ const PDFViewerApplication = {
         this.viewState = ViewType.GROUPED;
 
         const data = await response.json();
-        this.pdfThumbnailViewer?.setDocumentsData(data);
+        const flatPages = data.result.flatMap(doc => doc.pages);
+        const newPdfBlob = await this.extractPagesFromPdf(flatPages);
+
+        console.log('newPdfBlob:', newPdfBlob);
+        console.log('Is it a Blob?', newPdfBlob instanceof Blob);
+
+        // this.pdfThumbnailViewer?.setDocumentsData(data);
+
+        const url = URL.createObjectURL(newPdfBlob);
+        // const a = document.createElement('a');
+        // a.href = url;
+        // a.download = `temp-pdf.pdf`;
+        // document.body.appendChild(a);
+        // a.click();
+        // document.body.removeChild(a);
+        // URL.revokeObjectURL(url);
+        
+        PDFViewerApplication.open({ url: url, needsThumbnailsRefresh: false, documentsResponse: data, flatPages });
 
         this.refreshOptions();
 
@@ -1469,6 +1501,139 @@ const PDFViewerApplication = {
     });
   },
 
+  editPDF() {
+    this.editorState = EditorState.EDIT;
+    this.refreshOptions();
+  },
+
+  async applyChanges() {
+    const documentsData = this.pdfThumbnailViewer.documentsData;
+    // const newOrderedPages = documentsData
+    //   .flatMap(doc => doc.pages)
+    //   .map(p => p.pageNumber); 
+    // const newPDFUrl = await this.generateNewPDF(newOrderedPages);
+
+    const newPDFUrl = await this.regeneratePdfAfterChanges();
+
+    this.editorState = EditorState.VIEW;
+    this.refreshOptions();
+
+    PDFViewerApplication.open({ url: newPDFUrl, needsThumbnailsRefresh: false, documentsData });
+  },
+
+  async regeneratePdfAfterChanges() {
+    const documentsData = this.pdfThumbnailViewer.documentsData;
+    console.log("Regenerating PDF based on the final order in documentsData.");
+  
+    // Flatten out all the pages in documentsData, in the current container order.
+    // e.g. if container #1 has [4,1,2,3], container #2 has [5,6], finalOrderedPages = [4,1,2,3,5,6].
+    const finalOrderedPages = documentsData
+      .flatMap(doc => doc.pages)   // -> array of { pageNumber, id, ... }
+      .map(p => p.pageNumber);     // -> array of numeric page numbers
+  
+    console.log("finalOrderedPages after user’s drag/drop operations:", finalOrderedPages);
+  
+    // Now generate the PDF in that exact page order using pdf-lib.
+    // This is basically your existing "generateNewPDF" or "extractPagesFromPdf" logic,
+    // but we'll inline it here for clarity.
+  
+    // 1) Get the original PDF data
+    const originalPdfBytes = await this.pdfDocument.getData();
+    const originalPdf = await PDFDocument.load(originalPdfBytes);
+    const totalPages = originalPdf.getPageCount();
+  
+    // 2) Validate
+    const invalidPages = finalOrderedPages.filter(n => n < 1 || n > totalPages);
+    if (invalidPages.length > 0) {
+      throw new Error(
+        `Invalid pages: ${invalidPages.join(", ")}. ` +
+        `Original PDF has ${totalPages} pages.`
+      );
+    }
+  
+    // 3) Create new PDF
+    const newPdf = await PDFDocument.create();
+  
+    // Convert each pageNumber to 0-based index for copyPages
+    const zeroBased = finalOrderedPages.map(n => n - 1);
+    console.log("Copying pages in zero-based order:", zeroBased);
+  
+    const copiedPages = await newPdf.copyPages(originalPdf, zeroBased);
+  
+    // 4) Add them in the new PDF
+    copiedPages.forEach((page, i) => {
+      console.log(`Adding old pageIndex=${zeroBased[i]} as new PDF page #${i + 1}`);
+      newPdf.addPage(page);
+    });
+  
+    // 5) Finalize the PDF
+    const newPdfBytes = await newPdf.save();
+    const blob = new Blob([newPdfBytes], { type: "application/pdf" });
+  
+    console.log("Done regenerating PDF. Blob size:", newPdfBytes.length);
+
+    const url = URL.createObjectURL(blob);
+    return url;
+  },
+
+  async generateNewPDF(pagesToExtract) {
+    console.log("generateNewPDF called with pagesToExtract:", pagesToExtract);
+  
+    // 1) Load the original PDF bytes.
+    const pdfBytes = await this.pdfDocument.getData();
+    console.log("Original PDF bytes length:", pdfBytes?.byteLength);
+  
+    const originalPdf = await PDFDocument.load(pdfBytes);
+    const totalPages = originalPdf.getPageCount();
+    console.log("Original PDF totalPages:", totalPages);
+  
+    // 2) If pagesToExtract is empty or missing, default to all pages.
+    if (!pagesToExtract || pagesToExtract.length === 0) {
+      pagesToExtract = Array.from({ length: totalPages }, (_, i) => i + 1);
+      console.log("pagesToExtract was empty; defaulting to:", pagesToExtract);
+    }
+  
+    // 3) Validate that no page is out of range.
+    const invalidPages = pagesToExtract.filter(
+      page => page < 1 || page > totalPages
+    );
+    if (invalidPages.length > 0) {
+      throw new Error(
+        `Invalid page numbers: ${invalidPages.join(", ")}. ` +
+        `The PDF has ${totalPages} pages.`
+      );
+    }
+  
+    console.log("Final pagesToExtract array:", pagesToExtract);
+  
+    // 4) Create a new PDF & copy pages in the specified order.
+    const newPdf = await PDFDocument.create();
+    const pagesZeroBased = pagesToExtract.map(pageNumber => pageNumber - 1);
+    console.log("pagesZeroBased (for pdf-lib.copyPages):", pagesZeroBased);
+  
+    // Copy the pages from the original PDF, in that order.
+    const copiedPages = await newPdf.copyPages(originalPdf, pagesZeroBased);
+    console.log("Copied pages count:", copiedPages.length);
+  
+    // Add each copied page in the new PDF (in the same order).
+    copiedPages.forEach((page, i) => {
+      console.log(
+        `Adding old pageIndex=${pagesZeroBased[i]} as new PDF page #${i + 1}`
+      );
+      newPdf.addPage(page);
+    });
+  
+    // 5) Finalize and create Blob URL.
+    const newPdfBytes = await newPdf.save();
+    console.log("New PDF bytes length:", newPdfBytes?.byteLength);
+  
+    const pdfBlob = new Blob([newPdfBytes], { type: "application/pdf" });
+    const url = URL.createObjectURL(pdfBlob);
+    console.log("Returning new PDF URL:", url);
+  
+    return url;
+  },
+
   /**
    * Report the error; used for errors affecting loading and/or parsing of
    * the entire PDF document.
@@ -1543,7 +1708,7 @@ const PDFViewerApplication = {
     }
   },
 
-  load(pdfDocument) {
+  load(pdfDocument, args) {
     this.pdfDocument = pdfDocument;
 
     pdfDocument.getDownloadInfo().then(({ length }) => {
@@ -1587,7 +1752,7 @@ const PDFViewerApplication = {
     pdfViewer.setDocument(pdfDocument);
     const { firstPagePromise, onePageRendered, pagesPromise } = pdfViewer;
 
-    this.pdfThumbnailViewer?.setDocument(pdfDocument);
+    this.pdfThumbnailViewer?.setDocument(pdfDocument, args);
 
     const storedPromise = (this.store = new ViewHistory(
       pdfDocument.fingerprints[0]
@@ -2206,6 +2371,7 @@ const PDFViewerApplication = {
 
     eventBus._on("document-container-download", onDocumentContainerDownload.bind(this), opts);
     eventBus._on("document-container-retry", onDocumentContainerRetry.bind(this), opts);
+    eventBus._on("thumbnail-reordered", onThumbnailReordered.bind(this), opts);
     eventBus._on("resize", onResize.bind(this), opts);
     eventBus._on("hashchange", onHashchange.bind(this), opts);
     eventBus._on("beforeprint", this.beforePrint.bind(this), opts);
@@ -2328,6 +2494,8 @@ const PDFViewerApplication = {
     document.getElementById("classify-documents-button").addEventListener("click", this.searchDocumentsInFile.bind(this));
     document.getElementById("create-document-container-button").addEventListener("click", this.createDocumentContainer.bind(this));
     document.getElementById("extract-data-from-documents").addEventListener("click", this.extractDataFromDocument.bind(this));
+    document.getElementById("edit-pdf").addEventListener("click", this.editPDF.bind(this));
+    document.getElementById("apply-changes-button").addEventListener("click", this.applyChanges.bind(this));
 
     this.bindDropdownEvents();
   },
@@ -2832,6 +3000,10 @@ function onViewerModesChanged(name, evt) {
       // Unable to write to storage.
     });
   }
+}
+
+async function onThumbnailReordered({ source, newPDFUrl, documentsData, flatPages }) {
+  
 }
 
 async function onDocumentContainerRetry({ source, docId }) {

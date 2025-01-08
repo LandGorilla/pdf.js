@@ -1911,6 +1911,9 @@ dialog :link {
   width: 100%;
   justify-content: flex-end;
   align-items: center;
+  font: message-box;
+  color: white;
+  font-size: 14px;
 }
 
 #sidebar-left-actions .button:hover {
