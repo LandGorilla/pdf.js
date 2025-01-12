@@ -806,6 +806,10 @@ a:focus > .thumbnail > .thumbnailImage,
   border: 1px dashed rgb(132 132 132);
 }
 
+.thumbnail-content {
+  transform-origin: center center;
+}
+
 .treeWithDeepNesting > .treeItem,
 .treeItem > .treeItems {
   margin-inline-start: 20px;
@@ -1795,9 +1799,15 @@ dialog :link {
   min-height: 150px;
 }
 
-.actions {
-  position: absolute; /* Position relative to .thumbnail */
-  bottom: 0px;        /* Adjust as needed */
+.thumbnail .actions {
+  position: absolute;
+  bottom: 0px;
+  flex-wrap: nowrap;
+  display: none;
+}
+
+.thumbnail[data-loaded="true"] .actions {
+  display: flex;
 }
 
 .action-button {
@@ -2026,6 +2036,9 @@ dialog :link {
   z-index: 1001;
 }
 
+#apply-changes-button {
+  cursor: pointer;
+}
 
 
 /* Progress Bar */
@@ -2188,6 +2201,11 @@ dialog :link {
   opacity: 0.8;
 }
 
+.document-container-options .document-extract {
+  color: white;
+  font: message-box;
+  cursor: pointer;
+}
 
 /* Document Form Container */
 .document-form-container {

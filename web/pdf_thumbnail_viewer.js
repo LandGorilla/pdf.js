@@ -23,7 +23,7 @@
 // PDFThumbnailViewer.js
 
 import Sortable from 'https://cdn.jsdelivr.net/npm/sortablejs/modular/sortable.esm.js';
-import { PDFDocument } from 'https://cdn.jsdelivr.net/npm/pdf-lib/+esm';
+import { PDFDocument, degrees } from 'https://cdn.jsdelivr.net/npm/pdf-lib/+esm';
 import {
   getVisibleElements,
   isValidRotation,
@@ -79,6 +79,7 @@ class PDFThumbnailViewer {
     this.enableHWA = enableHWA || false;
     this.documentsResponse = documentsResponse;
     this._documentStates = {};
+    this._selectedThumbnail = null;
 
     this.scroll = watchScroll(
       this.container,
@@ -87,27 +88,56 @@ class PDFThumbnailViewer {
     );
     this.#resetView();
 
-    // this.eventBus._on('thumbnail-delete', this._onDeleteThumbnail.bind(this));
+    this.eventBus._on('thumbnail-rotate', this._onRotateThumbnail.bind(this));
+    this.eventBus._on('thumbnail-delete', this._onDeleteThumbnail.bind(this));
     this.eventBus._on('thumbnail-download', this._onDownloadPage.bind(this));
     this.eventBus._on('thumbnail-click', this._onSelectThumbnail.bind(this));
   }
 
-  initializeDocuments(documents) {
-    const docs = documents.map((doc, docIndex) => ({
-      ...doc,
-      id: `doc-${docIndex}`, // Unique ID for the document
-      pages: doc.pages.map((pageNumber, pageIndex) => ({
-        pageNumber, // Use the actual page number
-        id: `doc-${docIndex}-page-${pageIndex}`, // Unique ID for each page
-      })),
-    }));
+  async initializeDocuments(documents) {
+    if (!this.pdfDocument) {
+      return;
+    }
+
+    const docPromises = documents.map(async (doc, docIndex) => {
+      // Now map over each pageNumber in this doc’s `pages`.
+      const pagePromises = doc.pages.map(async (pageNumber, pageIndex) => {
+        // 1) Load the actual PDF page from pdf-lib
+        const page = await this.pdfDocument.getPage(pageNumber);
+
+        // 2) Read the rotation in degrees
+        // pdf-lib’s `getRotation()` returns an object like { angle: 90, type: 'degrees' }
+        // const { angle } = pdfPage.getRotation();
+        const angle = page.rotate % 360;
+
+        // 3) Return the new page object
+        return {
+          pageNumber,                              // e.g. 1-based page number
+          id: `doc-${docIndex}-page-${pageIndex}`, // “doc-0-page-0” style
+          rotation: angle,                         // e.g. 0, 90, 180, 270
+        };
+      });
+
+      // Wait for all pages in this doc
+      const pages = await Promise.all(pagePromises);
+
+      // Return a new doc object with an ID, plus the updated pages array
+      return {
+        ...doc,
+        id: `doc-${docIndex}`,
+        pages,
+      };
+    });
+
+    // Wait for all docs
+    const docs = await Promise.all(docPromises);
     return docs;
   }
 
-  setDocumentsData(response) {
+  async setDocumentsData(response) {
     this.#resetView();
     
-    this.documentsData = this.initializeDocuments(response.result);
+    this.documentsData = await this.initializeDocuments(response.result);
     this._documenTypes = response.document_types;
 
     for (const doc of this.documentsData) {
@@ -134,6 +164,26 @@ class PDFThumbnailViewer {
       scrollEl: this.container,
       views: this._thumbnails,
     });
+  }
+
+  #forceRendering() {
+    const visibleThumbs = this.#getVisibleThumbs();
+    const scrollAhead = this.#getScrollAhead(visibleThumbs);
+    const thumbView = this.renderingQueue.getHighestPriority(
+      visibleThumbs,
+      this._thumbnails,
+      scrollAhead
+    );
+  
+    if (thumbView) {
+      this.#ensurePdfPageLoaded(thumbView).then(() => {
+        this.renderingQueue.renderView(thumbView);
+      }).catch(err => {
+        console.error("Error during forceRendering:", err);
+      });
+      return true;
+    }
+    return false;
   }
 
   scrollThumbnailIntoView(pageNumber) {
@@ -264,29 +314,27 @@ class PDFThumbnailViewer {
     this._pageLabels = null;
     this._pagesRotation = 0;
 
+    this.cleanup();
+
     // Remove the thumbnails from the DOM.
     this.container.textContent = '';
+
+    console.log("[#resetView] container child count:", this.container.childNodes.length);
   }
 
   /**
    * @param {PDFDocumentProxy} pdfDocument
    */
-  setDocument(pdfDocument, args={}) {
-    if (args.needsThumbnailsRefresh) {
-      this.pdfDocument = pdfDocument;
-      return;
-    }
-
-    if (this.pdfDocument) {
-      this.#cancelRendering();
-      this.#resetView();
-    }
-
-    this.pdfDocument = pdfDocument;
+  async setDocument(pdfDocument, args={}) {
     if (!pdfDocument) {
       return;
     }
 
+    this.#cancelRendering();
+    this.#resetView();
+
+    this.pdfDocument = pdfDocument;
+    
     let documentsResponse = args.documentsResponse;
     if (documentsResponse && args.flatPages) {
       const oldToNew = {};
@@ -298,24 +346,19 @@ class PDFThumbnailViewer {
         doc.pages = doc.pages.map(oldPageNum => oldToNew[oldPageNum]);
       });
 
-      this.setDocumentsData(documentsResponse);
+      await this.setDocumentsData(documentsResponse);
     }
 
     if (args.documentsData && args.flatPages) {
-    //   const oldToNew = {};
-    //   args.flatPages.forEach((oldPage, i) => {
-    //     oldToNew[oldPage] = i + 1;  // new PDF pages are 1-based
-    //   });
-    
-    //   args.documentsData.forEach(doc => {
-    //     doc.pages.forEach(pageObj => {
-    //       // pageObj.pageNumber = oldToNew[pageObj.pageNumber];
-    //     });
-    //   });
-    
-      this.#resetView();
       this.documentsData = args.documentsData;
-      this.#renderDocumentContainers();
+
+      this.#renumberDocsAndPages();
+      // this.#renderDocumentContainers();
+
+      // *** DEBUGGING *** 
+      console.log("[setDocument] documentsData before rendering:");
+      console.log(JSON.stringify(this.documentsData, null, 2));
+      // *** DEBUGGING ***
     }
 
     const firstPagePromise = pdfDocument.getPage(1);
@@ -327,11 +370,13 @@ class PDFThumbnailViewer {
 
         switch (PDFViewerApplication.viewState) {
           case ViewType.NORMAL:
+            console.log(">>> renderDocuments");
             this.#renderDocuments(firstPdfPage, viewport);
             break;
           case ViewType.GROUPED:
+            console.log(">>> renderDocumentContainers");
             this.#renderDocumentContainers();
-            this.scrollThumbnailIntoView(1);
+            // this.scrollThumbnailIntoView(1);
             break;
         }
       })
@@ -437,6 +482,8 @@ class PDFThumbnailViewer {
       });
       this._thumbnails.push(thumbnail);
     }
+    this._selectedThumbnail = this._thumbnails[0];
+
     // Set the first `pdfPage` immediately, since it's already loaded,
     // rather than having to repeat the `PDFDocumentProxy.getPage` call in
     // the `this.#ensurePdfPageLoaded` method before rendering can start.
@@ -448,13 +495,19 @@ class PDFThumbnailViewer {
   }
 
   #renderDocumentContainers() {
+    console.log("[renderDocumentContainers] about to clear container, current child count:", 
+    this.container.childNodes.length);
+
     // Clear existing thumbnails and containers
     this._thumbnails = [];
     this.container.textContent = '';
 
     const promises = [];
 
-    for (const doc of this.documentsData) {
+    for (const [docIndex, doc] of this.documentsData.entries()) {
+      // console.log(`Rendering docIndex=${docIndex}, docId=${doc.id}, pages=`, 
+      //   doc.pages.map(p => p.id));
+
       // Create a container for the document
       const docContainer = document.createElement('div');
       docContainer.classList.add('document-container');
@@ -512,7 +565,19 @@ class PDFThumbnailViewer {
 
       // Create a horizontal list of options (delete, download)
       const optionsContainer = document.createElement('div');
-      optionsContainer.classList.add('document-container-options'); 
+      optionsContainer.classList.add('document-container-options');
+
+      // Create and append new "Extract" div
+      const extractDiv = document.createElement('div');
+      extractDiv.textContent = 'Extract';
+      extractDiv.classList.add('document-extract');
+      extractDiv.addEventListener('click', (event) => {
+        const docId = doc.id;
+        const documentData = this.documentsData.find((d) => d.id === docId);
+        const pageNumbers = documentData.pages.map((page) => page.pageNumber);
+        this.eventBus.dispatch('document-container-extract', { source: this, docId, pageNumbers });
+      });
+      optionsContainer.appendChild(extractDiv);
 
       // Create Delete Icon Image
       const deleteIcon = document.createElement('img');
@@ -562,7 +627,6 @@ class PDFThumbnailViewer {
           pageColors: this.pageColors,
           enableHWA: this.enableHWA,
         });
-
         this._thumbnails.push(thumbnail);
 
         // Ensure the pdfPage is loaded and set it to the thumbnail
@@ -572,6 +636,8 @@ class PDFThumbnailViewer {
 
         promises.push(promise);
       }
+
+      this._selectedThumbnail = this._thumbnails[0];
 
       // STATUS AREA: Just a progress bar and a retry button
       const statusContainer = document.createElement('div');
@@ -621,11 +687,19 @@ class PDFThumbnailViewer {
       });
     }
 
-    // Wait for all pdfPages to be loaded
     Promise.all(promises).then(() => {
       this.renderingQueue.renderHighestPriority();
-      // Dispatch an event indicating thumbnails are ready
       this.eventBus.dispatch('thumbnailsready', { source: this });
+      
+      // // After all thumbnails are set up, apply rotation re-rendering if needed.
+      // for (const thumbnail of this._thumbnails) {
+      //   const rotation = thumbnail.pdfPage ? thumbnail.pdfPage.rotate : 0;
+      //   if (rotation && rotation !== 0) {
+      //     thumbnail.reRenderWithRotation(rotation).catch(err => {
+      //       console.error("Error in reRenderWithRotation:", err);
+      //     });
+      //   }
+      // }
     });
   }
 
@@ -698,6 +772,15 @@ class PDFThumbnailViewer {
     }
   }
 
+  displayFormForCurrentDocument(docId) {
+    const docContainer = this._selectedThumbnail.div.closest('.document-container');
+    const selecetdDocId = docContainer.id;
+    
+    if (selecetdDocId != docId) { return; }
+    
+    this.#displayDocumentForm(docId);
+  }
+
   // Function to generate a unique ID (you can customize this logic)
   #generateUniqueId() {
     return '_' + Math.random().toString(36).substr(2, 9);
@@ -705,7 +788,6 @@ class PDFThumbnailViewer {
 
   // Function to add a new empty document container at the beginning
   addNewEmptyDocumentContainer() {
-    // Create a new empty document object
     const newDoc = {
       id: this.#generateUniqueId(),
       document: '',        // Empty file name
@@ -802,6 +884,7 @@ class PDFThumbnailViewer {
     const thumbnail = source;
     const docContainer = thumbnail.div.closest('.document-container');
     const docId = docContainer.id;
+    this._selectedThumbnail = source;
 
     this.#displayDocumentForm(docId);
   }
@@ -809,102 +892,22 @@ class PDFThumbnailViewer {
   async _onDeleteThumbnail(evt) {
     const { source, id } = evt;
     const thumbnail = source;
-
-    // 1) Log the thumbnail ID.
-    console.log("Deleting thumbnail with id:", thumbnail.id);
-    
-    // 2) Check each document in documentsData.
+  
     for (const doc of this.documentsData) {
-      console.log("Checking doc:", doc.id, "with pages:", doc.pages);
-
-      // 3) Print the IDs in doc.pages as well.
-      console.log("Page IDs in this doc:", doc.pages.map(p => p.id));
-
-      const pageIndex = doc.pages.findIndex((page) => {
-        console.log("Comparing page.id:", page.id, "with thumbnail.id:", thumbnail.id);
-        return page.id === thumbnail.id;
-      });
-
-      console.log("Resulting pageIndex:", pageIndex);
-
+      const pageIndex = doc.pages.findIndex((page) => page.id === thumbnail.id);
       if (pageIndex !== -1) {
-        // If we actually found the page, splice it out.
-        console.log("Splicing out page at index:", pageIndex, "from doc:", doc.id);
         doc.pages.splice(pageIndex, 1);
-
-        // Now confirm it’s removed.
-        console.log("Pages after splice:", doc.pages.map(p => p.id));
-
-        // Handle empty documents
-        // if (doc.pages.length === 0) {
-        //   console.log("Document is now empty. Removing it completely:", doc.id);
-        //   const docIndex = this.documentsData.indexOf(doc);
-        //   if (docIndex !== -1) {
-        //     this.documentsData.splice(docIndex, 1);
-        //     console.log("Removed entire doc from documentsData. Current docs:", this.documentsData);
-        //   }
-        // }
-
-        // Break out of the loop once we've found our page.
         break;
       }
     }
   
-    // Remove the thumbnail's DOM element
-    thumbnail.div.remove();
-  
-    // Remove the thumbnail from the _thumbnails array
     const thumbIndex = this._thumbnails.indexOf(thumbnail);
     if (thumbIndex !== -1) {
       this._thumbnails.splice(thumbIndex, 1);
     }
   
-    // const docContainer = thumbnail.div.closest('.document-container');
-    // if (docContainer) {
-    //   // We are in document container mode
-    //   // Remove the page from documentsData
-    //   for (const doc of this.documentsData) {
-    //     const pageIndex = doc.pages.findIndex((page) => page.id === thumbnail.id);
-    //     if (pageIndex !== -1) {
-    //       doc.pages.splice(pageIndex, 1);
-  
-    //       // Handle empty documents
-    //       if (doc.pages.length === 0) {
-    //         if (docContainer) {
-    //           docContainer.remove();
-    //         }
-    //         const docIndex = this.documentsData.indexOf(doc);
-    //         if (docIndex !== -1) {
-    //           this.documentsData.splice(docIndex, 1);
-    //         }
-    //       }
-    //       break;
-    //     }
-    //   }
-    // }
-  
-    // Update page numbers
-    this.#updatePageNumbers();
-  
-    // Re-render if necessary
+    thumbnail.div.remove();
     this.renderingQueue.renderHighestPriority();
-
-    // Dispatch an event with the new page number and total pages
-    const newTotalPages = this._thumbnails.length;
-    const newPageNumber = Math.min(this._currentPageNumber, newTotalPages) || 1;
-
-    // this.eventBus.dispatch('pageinfochanged', {
-    //   source: this,
-    //   pageNumber: newPageNumber,
-    //   totalPages: newTotalPages,
-    // });
-
-    const newOrderedPages = this.documentsData
-      .flatMap(doc => doc.pages)
-      .map(p => p.pageNumber); 
-
-    const newPDFUrl = await this.generateNewPDF(newOrderedPages);
-    this.eventBus.dispatch('thumbnail-reordered', { source: this, newPDFUrl, documentsData: this.documentsData, flatPages: newOrderedPages });
   }
 
   async _generatePDF(evt) {
@@ -957,109 +960,105 @@ class PDFThumbnailViewer {
 
   async _onThumbnailDrop(evt) {
     const { item, from, to, oldIndex, newIndex } = evt;
-  
-    // Get the source and destination document containers
     const fromDocContainer = from.closest('.document-container');
     const toDocContainer = to.closest('.document-container');
-  
+    
     const fromDocId = fromDocContainer.id;
     const toDocId = toDocContainer.id;
-  
-    console.log(
-      `Dragging from docId=${fromDocId} to docId=${toDocId}, 
-      oldIndex=${oldIndex}, newIndex=${newIndex}`
-    );
-  
-    const fromDocIndex = this.documentsData.findIndex(
-      (doc) => doc.id === fromDocId
-    );
-    const toDocIndex = this.documentsData.findIndex(
-      (doc) => doc.id === toDocId
-    );
-  
+    
+    // 1) Identify the "fromDoc" and "toDoc" in documentsData.
+    const fromDocIndex = this.documentsData.findIndex(doc => doc.id === fromDocId);
+    const toDocIndex = this.documentsData.findIndex(doc => doc.id === toDocId);
     const fromDoc = this.documentsData[fromDocIndex];
     const toDoc = this.documentsData[toDocIndex];
-  
-    // Remove the page from the source document
+    
+    // 2) Remove the page from the source doc and insert into destination doc
     const [movedPage] = fromDoc.pages.splice(oldIndex, 1);
-    console.log(
-      `Removed page with id=${movedPage.id} from doc=${fromDoc.id}. 
-      fromDoc now has pages:`,
-      fromDoc.pages.map(p => p.pageNumber)
-    );
-  
-    // Insert the page into the destination document
     toDoc.pages.splice(newIndex, 0, movedPage);
-    console.log(
-      `Inserted page with id=${movedPage.id} into doc=${toDoc.id} at index=${newIndex}. 
-      toDoc now has pages:`,
-      toDoc.pages.map(p => p.pageNumber)
-    );
-  
-    // Update the _thumbnails array
-    const movedThumbnailIndex = this._thumbnails.findIndex(
-      (thumb) => thumb.id === movedPage.id
-    );
-    const [movedThumbnail] = this._thumbnails.splice(movedThumbnailIndex, 1);
-  
-    // Find the insertion index in _thumbnails
-    const toDocThumbnails = this._thumbnails.filter(
-      (thumb) => thumb.container.closest('.document-container').id === toDocId
-    );
-  
-    let insertIndex;
-    if (toDocThumbnails.length === 0) {
-      // If the destination document has no thumbnails yet
-      insertIndex = this._thumbnails.findIndex(
-        (thumb) => thumb.container.closest('.document-container').id === toDocId
-      );
-      if (insertIndex === -1) {
-        insertIndex = this._thumbnails.length;
-      }
-    } else {
-      if (newIndex >= toDocThumbnails.length) {
-        insertIndex =
-          this._thumbnails.indexOf(
-            toDocThumbnails[toDocThumbnails.length - 1]
-          ) + 1;
-      } else {
-        insertIndex = this._thumbnails.indexOf(toDocThumbnails[newIndex]);
-      }
-    }
-  
-    this._thumbnails.splice(insertIndex, 0, movedThumbnail);
-  
-    // Reassign page numbers to ensure they are sequential (or keep original if desired)
-    for (const doc of this.documentsData) {
-      for (let i = 0; i < doc.pages.length; i++) {
-        // doc.pages[i].pageNumber = i + 1; // Example if you wanted fully sequential
-        // or keep original pageNumber as you do in your code:
-        // doc.pages[i].pageNumber = doc.pages[i].pageNumber;
-      }
-    }
-  
-    // Update the pageNumber in thumbnails
-    // for (const thumbnail of this._thumbnails) {
-    //   const page = this.documentsData
-    //     .flatMap((doc) => doc.pages)
-    //     .find((p) => p.id === thumbnail.id);
-    //   if (page) {
-    //     thumbnail.pageNumber = page.pageNumber;
-    //   }
-    // }
-  
-    // Print final order of pages for each document container, for debugging
-    console.log("=== Final documentsData order after drop ===");
-    for (const doc of this.documentsData) {
-      console.log(
-        `Doc ${doc.id} pages:`,
-        doc.pages.map(p => p.pageNumber)
-      );
-    }
-    console.log("============================================");
-  
-    // Optionally, re-render the thumbnails if necessary
+    
+    // 4) Re-render or at least re-queue the rendering so we see the changes.
     this.renderingQueue.renderHighestPriority();
+  }
+
+  _onRotateThumbnail(evt) {
+    const { source } = evt; // 'source' is the thumbnail
+    const thumbnail = source;
+  
+    // 1) Find the associated doc/page in documentsData
+    const docContainer = thumbnail.div.closest('.document-container');
+    const docId = docContainer?.id;
+    if (!docId) return;
+  
+    const doc = this.documentsData.find(d => d.id === docId);
+    if (!doc) return;
+  
+    const page = doc.pages.find(p => p.id === thumbnail.id);
+    if (!page) return;
+  
+    // 2) Increment rotation by 90°, wrapping at 360
+    //    If the thumbnail has a current rotation, use that; otherwise fallback to 0.
+    const newRotation = ((thumbnail.rotation || 0) + 90) % 360;
+  
+    // 3) Store the new rotation in documentsData
+    page.rotation = newRotation;
+  
+    // 4) Re-render the thumbnail with the new rotation
+    thumbnail.reRenderWithRotation(newRotation)
+      .catch(err => {
+        console.error("Error in reRenderWithRotation:", err);
+      });
+  
+    // 5) Optionally re-queue rendering (if you want to ensure highest priority drawing)
+    this.renderingQueue.renderHighestPriority();
+  }
+
+  #renumberDocsAndPages() {
+    // If you prefer doc-local page numbering, reset to 1 inside each doc loop.
+    // If you prefer *global* numbering across all docs, use a single counter outside.
+    let globalPageNumber = 1;
+  
+    // Loop over each doc in documentsData
+    for (let docIndex = 0; docIndex < this.documentsData.length; docIndex++) {
+      const doc = this.documentsData[docIndex];
+      const oldDocId = doc.id; // In case you want to rename its DOM container too.
+      const newDocId = `doc-${docIndex}`;
+      doc.id = newDocId;
+  
+      // If you have a <div> with the old ID in the DOM, rename it:
+      const docContainer = document.getElementById(oldDocId);
+      if (docContainer) {
+        docContainer.id = newDocId;
+      }
+  
+      // Now loop over the pages in this doc
+      // (If you prefer doc-local numbering, set let pageNumber = 1; before the loop)
+      for (let pageIndex = 0; pageIndex < doc.pages.length; pageIndex++) {
+        const page = doc.pages[pageIndex];
+        const oldPageId = page.id;
+        const newPageId = `doc-${docIndex}-page-${pageIndex}`;
+  
+        // Update the page's ID
+        page.id = newPageId;
+        // page.rotation = 0;
+  
+        // Update pageNumber to either doc-local or global numbering:
+        // For doc-local:  page.pageNumber = pageIndex + 1;
+        // For global:     page.pageNumber = globalPageNumber++;
+        page.pageNumber = globalPageNumber++;
+  
+        // Find the corresponding thumbnail in _thumbnails (by old ID).
+        const thumbIndex = this._thumbnails.findIndex(t => t.id === oldPageId);
+        if (thumbIndex !== -1) {
+          // Update the thumbnail's own ID
+          this._thumbnails[thumbIndex].id = newPageId;
+          this._thumbnails[thumbIndex].div.id = newPageId;
+  
+          // If you have a setPageLabel() method, update the thumbnail label:
+          const label = page.pageNumber.toString();
+          this._thumbnails[thumbIndex].setPageLabel(label);
+        }
+      }
+    }
   }
 
   #updatePageNumbers() {

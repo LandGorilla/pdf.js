@@ -19,7 +19,7 @@
 // eslint-disable-next-line max-len
 /** @typedef {import("../src/display/api.js").PDFDocumentLoadingTask} PDFDocumentLoadingTask */
 
-import { PDFDocument } from 'https://cdn.jsdelivr.net/npm/pdf-lib/+esm';
+import { PDFDocument, degrees } from 'https://cdn.jsdelivr.net/npm/pdf-lib/+esm';
 import {
   animationStarted,
   apiPageLayoutToViewerModes,
@@ -1004,7 +1004,7 @@ const PDFViewerApplication = {
     if (this.pdfDocument) {
       this.pdfDocument = null;
 
-      this.pdfThumbnailViewer?.setDocument(null);
+      await this.pdfThumbnailViewer?.setDocument(null);
       this.pdfViewer.setDocument(null);
       this.pdfLinkService.setDocument(null);
       this.pdfDocumentProperties?.setDocument(null);
@@ -1096,8 +1096,8 @@ const PDFViewerApplication = {
     };
 
     return loadingTask.promise.then(
-      pdfDocument => {
-        this.load(pdfDocument, args);
+      async pdfDocument => {
+        await this.load(pdfDocument, args);
       },
       reason => {
         if (loadingTask !== this.pdfLoadingTask) {
@@ -1248,8 +1248,6 @@ const PDFViewerApplication = {
         console.log('newPdfBlob:', newPdfBlob);
         console.log('Is it a Blob?', newPdfBlob instanceof Blob);
 
-        // this.pdfThumbnailViewer?.setDocumentsData(data);
-
         const url = URL.createObjectURL(newPdfBlob);
         // const a = document.createElement('a');
         // a.href = url;
@@ -1393,6 +1391,7 @@ const PDFViewerApplication = {
   
       // Mark doc as done
       this.pdfThumbnailViewer?.setDocumentState(docId, 'done');
+      this.pdfThumbnailViewer?.displayFormForCurrentDocument(docId);
       return result;
   
     } catch (error) {
@@ -1507,18 +1506,19 @@ const PDFViewerApplication = {
   },
 
   async applyChanges() {
+    // Flatten the pages in the final desired order.
     const documentsData = this.pdfThumbnailViewer.documentsData;
-    // const newOrderedPages = documentsData
-    //   .flatMap(doc => doc.pages)
-    //   .map(p => p.pageNumber); 
-    // const newPDFUrl = await this.generateNewPDF(newOrderedPages);
+    const newOrderedPages = documentsData
+      .flatMap(doc => doc.pages)
+      .map(p => p.pageNumber);
 
-    const newPDFUrl = await this.regeneratePdfAfterChanges();
+    // Generate the new PDF with those pages.
+    const newPDFUrl = await this.generateNewPDF(newOrderedPages);
 
     this.editorState = EditorState.VIEW;
     this.refreshOptions();
 
-    PDFViewerApplication.open({ url: newPDFUrl, needsThumbnailsRefresh: false, documentsData });
+    PDFViewerApplication.open({ url: newPDFUrl, needsThumbnailsRefresh: false, documentsData, flatPages: newOrderedPages });
   },
 
   async regeneratePdfAfterChanges() {
@@ -1576,62 +1576,83 @@ const PDFViewerApplication = {
     return url;
   },
 
+  flattenPageRotation(page, rotation) {
+    // Ensure the rotation is in [0, 90, 180, 270] form.
+    rotation = rotation % 360;
+  
+    // The current page size
+    const { width, height } = page.getSize();
+  
+    switch (rotation) {
+      case 0:
+        // No change needed
+        page.setRotation(degrees(0));
+        return;
+  
+      case 90:
+        // Physically rotate 90° means the new page is "tall" instead of "wide"
+        page.setSize({ width: height, height: width });
+        // Move content up by the new width so it doesn't get clipped at bottom
+        page.translateContent(0, width);
+        // Rotate all content 90 degrees
+        page.rotateContent(degrees(90));
+        break;
+  
+      case 180:
+        // Page dimensions remain the same for 180°
+        // Move content "right and up" by (width, height)
+        page.translateContent(width, height);
+        page.rotateContent(degrees(180));
+        break;
+  
+      case 270:
+        // For 270°, swap width & height
+        page.setSize({ width: height, height: width });
+        // Translate content to the right by the new width (which was old height)
+        page.translateContent(height, 0);
+        page.rotateContent(degrees(270));
+        break;
+    }
+  
+    // Ensure the page dictionary's /Rotate is zero
+    page.setRotation(degrees(0));
+  },
+
   async generateNewPDF(pagesToExtract) {
-    console.log("generateNewPDF called with pagesToExtract:", pagesToExtract);
-  
-    // 1) Load the original PDF bytes.
-    const pdfBytes = await this.pdfDocument.getData();
-    console.log("Original PDF bytes length:", pdfBytes?.byteLength);
-  
-    const originalPdf = await PDFDocument.load(pdfBytes);
-    const totalPages = originalPdf.getPageCount();
-    console.log("Original PDF totalPages:", totalPages);
-  
-    // 2) If pagesToExtract is empty or missing, default to all pages.
-    if (!pagesToExtract || pagesToExtract.length === 0) {
-      pagesToExtract = Array.from({ length: totalPages }, (_, i) => i + 1);
-      console.log("pagesToExtract was empty; defaulting to:", pagesToExtract);
-    }
-  
-    // 3) Validate that no page is out of range.
-    const invalidPages = pagesToExtract.filter(
-      page => page < 1 || page > totalPages
-    );
-    if (invalidPages.length > 0) {
-      throw new Error(
-        `Invalid page numbers: ${invalidPages.join(", ")}. ` +
-        `The PDF has ${totalPages} pages.`
-      );
-    }
-  
-    console.log("Final pagesToExtract array:", pagesToExtract);
-  
-    // 4) Create a new PDF & copy pages in the specified order.
+    // 1) Load the original PDF
+    const originalPdfBytes = await this.pdfDocument.getData();
+    const originalPdf = await PDFDocument.load(originalPdfBytes);
+    
     const newPdf = await PDFDocument.create();
-    const pagesZeroBased = pagesToExtract.map(pageNumber => pageNumber - 1);
-    console.log("pagesZeroBased (for pdf-lib.copyPages):", pagesZeroBased);
   
-    // Copy the pages from the original PDF, in that order.
-    const copiedPages = await newPdf.copyPages(originalPdf, pagesZeroBased);
-    console.log("Copied pages count:", copiedPages.length);
+    // 2) Copy pages in the specified order
+    const zeroBased = pagesToExtract.map(num => num - 1);
+    const copiedPages = await newPdf.copyPages(originalPdf, zeroBased);
   
-    // Add each copied page in the new PDF (in the same order).
-    copiedPages.forEach((page, i) => {
-      console.log(
-        `Adding old pageIndex=${pagesZeroBased[i]} as new PDF page #${i + 1}`
-      );
-      newPdf.addPage(page);
+    // 3) Create a lookup from pageNumber => rotation
+    const pageRotationMap = {};
+    for (const doc of this.pdfThumbnailViewer.documentsData) {
+      for (const page of doc.pages) {
+        pageRotationMap[page.pageNumber] = page.rotation || 0; 
+      }
+    }
+  
+    copiedPages.forEach((pdfPage, i) => {
+      // zeroBased[i] is the original zero-based index
+      const pageNum = zeroBased[i] + 1; // convert back to 1-based
+      const rotateVal = pageRotationMap[pageNum] || 0;
+  
+      if (rotateVal) {
+        pdfPage.setRotation(degrees(rotateVal)); 
+      }
+  
+      newPdf.addPage(pdfPage);
     });
   
-    // 5) Finalize and create Blob URL.
+    // 5) Save and return URL
     const newPdfBytes = await newPdf.save();
-    console.log("New PDF bytes length:", newPdfBytes?.byteLength);
-  
-    const pdfBlob = new Blob([newPdfBytes], { type: "application/pdf" });
-    const url = URL.createObjectURL(pdfBlob);
-    console.log("Returning new PDF URL:", url);
-  
-    return url;
+    const blob = new Blob([newPdfBytes], { type: 'application/pdf' });
+    return URL.createObjectURL(blob);
   },
 
   /**
@@ -1708,7 +1729,7 @@ const PDFViewerApplication = {
     }
   },
 
-  load(pdfDocument, args) {
+  async load(pdfDocument, args) {
     this.pdfDocument = pdfDocument;
 
     pdfDocument.getDownloadInfo().then(({ length }) => {
@@ -1752,7 +1773,7 @@ const PDFViewerApplication = {
     pdfViewer.setDocument(pdfDocument);
     const { firstPagePromise, onePageRendered, pagesPromise } = pdfViewer;
 
-    this.pdfThumbnailViewer?.setDocument(pdfDocument, args);
+    await this.pdfThumbnailViewer?.setDocument(pdfDocument, args);
 
     const storedPromise = (this.store = new ViewHistory(
       pdfDocument.fingerprints[0]
@@ -2371,6 +2392,7 @@ const PDFViewerApplication = {
 
     eventBus._on("document-container-download", onDocumentContainerDownload.bind(this), opts);
     eventBus._on("document-container-retry", onDocumentContainerRetry.bind(this), opts);
+    eventBus._on("document-container-extract", onDocumentContainerExtract.bind(this), opts);
     eventBus._on("thumbnail-reordered", onThumbnailReordered.bind(this), opts);
     eventBus._on("resize", onResize.bind(this), opts);
     eventBus._on("hashchange", onHashchange.bind(this), opts);
@@ -3004,6 +3026,23 @@ function onViewerModesChanged(name, evt) {
 
 async function onThumbnailReordered({ source, newPDFUrl, documentsData, flatPages }) {
   
+}
+
+async function onDocumentContainerExtract({ source, docId, pageNumbers }) {
+  try {
+    const docsAndPages = this.getCurrentDocumentsAndPages();
+    const docData = docsAndPages.find(d => d.docId === docId);
+    if (!docData) {
+      console.error(`No document found for docId: ${docId}`);
+      return;
+    }
+
+    await this.processDocument(docId, docData);
+
+    console.log(`Retry for document ${docId} finished successfully.`);
+  } catch (error) {
+    console.error(`Retry for document ${docId} failed:`, error);
+  }
 }
 
 async function onDocumentContainerRetry({ source, docId }) {

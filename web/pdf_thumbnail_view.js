@@ -100,74 +100,110 @@ class PDFThumbnailView {
    * @param {HTMLElement} anchor - The anchor element wrapping the thumbnail.
    */
   setupLayout(container, anchor) {
-    // Create the thumbnail container
+    // Outer thumbnail container
     const div = document.createElement("div");
     div.className = "thumbnail";
     div.id = this.id;
-    div.setAttribute("data-page-number", this.id);
-    this.div = div;
-    this.#updateDims();
-
-    // Create the image placeholder
-    const img = document.createElement("div");
-    img.className = "thumbnailImage";
-    this._placeholderImg = img;
-
-    div.append(img);
-
-    // Create the actions container with buttons
+    div.setAttribute("data-loaded", false);
+    // Do NOT apply rotation to `div`; keep it a stable bounding box.
+  
+    // A sub-container for the page image (canvas or <img>)
+    const contentDiv = document.createElement("div");
+    contentDiv.classList.add("thumbnail-content");
+  
+    // The placeholder for the eventual rendered image
+    const imgPlaceholder = document.createElement("div");
+    imgPlaceholder.className = "thumbnailImage";
+    this._placeholderImg = imgPlaceholder;
+  
+    // Put the placeholder inside the contentDiv
+    contentDiv.appendChild(imgPlaceholder);
+  
+    // Append contentDiv to the outer .thumbnail
+    div.appendChild(contentDiv);
+  
+    // ...Then create the icons container
     const actionsDiv = document.createElement("div");
     actionsDiv.className = "actions";
-
-    // Define the buttons and their corresponding icons and tooltips
+  
+    // Define your icons
     const buttons = [
       { class: "trash-icon", src: "./images/action-trash.png", tooltip: "Delete Page" },
       { class: "copy-icon", src: "./images/action-copy.png", tooltip: "Copy Page" },
       { class: "download-icon", src: "./images/action-download.png", tooltip: "Download Page" },
       { class: "rotate-icon", src: "./images/action-rotate.png", tooltip: "Rotate PDF" },
     ];
-
-    // Create and append each button to the actions container
-    buttons.forEach((btn) => {
+  
+    // Build each button
+    buttons.forEach(btn => {
       const button = document.createElement("button");
       button.className = "action-button";
       button.title = btn.tooltip;
-      button.setAttribute("aria-label", btn.tooltip); // For accessibility
+      button.setAttribute("aria-label", btn.tooltip);
   
-      // Create the img element for the icon
       const iconImg = document.createElement("img");
       iconImg.className = `icon ${btn.class}`;
       iconImg.src = btn.src;
-      iconImg.alt = btn.alt; 
       iconImg.width = 16;
       iconImg.height = 16;
   
       button.appendChild(iconImg);
-  
-      // Add event listeners for each button
-      button.addEventListener("click", (event) => {
-        event.stopPropagation(); // Prevent triggering the thumbnail click
+      button.addEventListener("click", (e) => {
+        e.stopPropagation();
         this.handleActionButtonClick(btn.class);
       });
-  
       actionsDiv.appendChild(button);
     });
-
-    div.appendChild(actionsDiv); // Append actions to the thumbnail div
-
-    // Append the thumbnail to the anchor and container
-    anchor.append(div);
-    container.append(anchor);
+  
+    // Append icons to .thumbnail
+    div.appendChild(actionsDiv);
+  
+    // Put .thumbnail inside the anchor, then into the container
+    anchor.appendChild(div);
+    container.appendChild(anchor);
+  
+    this.div = div; // store reference
+    this.contentDiv = contentDiv;
   }
 
-  #updateDims() {
-    const { width, height } = this.viewport;
+  reRenderWithRotation(newRotation) {
+    // 1) Set the user rotation.
+    this.rotation = newRotation;
+    this.viewport = this.pdfPage.getViewport({ scale: 1, rotation: newRotation });
+  
+    // 4) Update dimensions (if you normally do so in setPdfPage or update).
+    //    This is optional but recommended if your #updateDims() uses `this.viewport`.
+    this.#updateDims(newRotation);
+  
+    // 5) Clear out any old rendering state.
+    this.reset();
+  
+    // 6) Render the thumbnail from scratch.
+    return this.draw(); // returns a Promise that resolves when rendering is done
+  }
+
+  #updateDims(angle = 0) {
+    // The original size from the PDF with rotation=0
+    const width = this._origWidth;
+    const height = this._origHeight;
+  
+    // Basic ratio
     const ratio = width / height;
-
+  
+    // By default, let's pick a fixed THUMBNAIL_WIDTH
     this.canvasWidth = THUMBNAIL_WIDTH;
-    this.canvasHeight = (this.canvasWidth / ratio) | 0;
+    this.canvasHeight = Math.floor(this.canvasWidth / ratio);
     this.scale = this.canvasWidth / width;
-
+  
+    // If the angle is 90 or 270, swap width & height
+    if (angle % 180 !== 0) {
+      const temp = this.canvasWidth;
+      this.canvasWidth = this.canvasHeight;
+      this.canvasHeight = temp;
+    }
+  
+    // Update the CSS custom props so your .thumbnail can use:
+    // width: var(--thumbnail-width); height: var(--thumbnail-height);
     const { style } = this.div;
     style.setProperty("--thumbnail-width", `${this.canvasWidth}px`);
     style.setProperty("--thumbnail-height", `${this.canvasHeight}px`);
@@ -176,6 +212,12 @@ class PDFThumbnailView {
   setPdfPage(pdfPage) {
     this.pdfPage = pdfPage;
     this.pdfPageRotate = pdfPage.rotate;
+
+    // Get the unrotated viewport (rotation=0) to determine its original size.
+    const noRotationViewport = pdfPage.getViewport({ scale: 1, rotation: 0 });
+    this._origWidth = noRotationViewport.width;
+    this._origHeight = noRotationViewport.height;
+
     const totalRotation = (this.rotation + this.pdfPageRotate) % 360;
     this.viewport = pdfPage.getViewport({ scale: 1, rotation: totalRotation });
     this.reset();
