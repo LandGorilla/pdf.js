@@ -23,7 +23,7 @@
 // PDFThumbnailViewer.js
 
 import Sortable from 'https://cdn.jsdelivr.net/npm/sortablejs/modular/sortable.esm.js';
-import { PDFDocument, degrees } from 'https://cdn.jsdelivr.net/npm/pdf-lib/+esm';
+import { PDFDocument } from 'https://cdn.jsdelivr.net/npm/pdf-lib/+esm';
 import {
   getVisibleElements,
   isValidRotation,
@@ -36,6 +36,7 @@ import { PDFViewerApplication, ViewType } from "./app.js";
 
 const THUMBNAIL_SCROLL_MARGIN = -19;
 const THUMBNAIL_SELECTED_CLASS = "selected";
+const CONTAINER_SELECTED_CLASS = "selected";
 
 /**
  * @typedef {Object} PDFThumbnailViewerOptions
@@ -80,6 +81,7 @@ class PDFThumbnailViewer {
     this.documentsResponse = documentsResponse;
     this._documentStates = {};
     this._selectedThumbnail = null;
+    this.sortableInstances = {};
 
     this.scroll = watchScroll(
       this.container,
@@ -92,6 +94,11 @@ class PDFThumbnailViewer {
     this.eventBus._on('thumbnail-delete', this._onDeleteThumbnail.bind(this));
     this.eventBus._on('thumbnail-download', this._onDownloadPage.bind(this));
     this.eventBus._on('thumbnail-click', this._onSelectThumbnail.bind(this));
+
+    const mainCheckbox = document.querySelector('#select-all-container input[type="checkbox"]');
+    mainCheckbox.addEventListener('change', (event) => {
+      this.toggleAllCheckboxes(event.target.checked);
+    });
   }
 
   async initializeDocuments(documents) {
@@ -166,26 +173,6 @@ class PDFThumbnailViewer {
     });
   }
 
-  #forceRendering() {
-    const visibleThumbs = this.#getVisibleThumbs();
-    const scrollAhead = this.#getScrollAhead(visibleThumbs);
-    const thumbView = this.renderingQueue.getHighestPriority(
-      visibleThumbs,
-      this._thumbnails,
-      scrollAhead
-    );
-  
-    if (thumbView) {
-      this.#ensurePdfPageLoaded(thumbView).then(() => {
-        this.renderingQueue.renderView(thumbView);
-      }).catch(err => {
-        console.error("Error during forceRendering:", err);
-      });
-      return true;
-    }
-    return false;
-  }
-
   scrollThumbnailIntoView(pageNumber) {
     if (!this.pdfDocument) {
       return;
@@ -196,7 +183,7 @@ class PDFThumbnailViewer {
         this.#scrollToDocumentPage(pageNumber);
         break;
       case ViewType.GROUPED:
-        // this.#scrollToDocumentContainer(pageNumber);
+        this.#scrollToDocumentContainer(pageNumber);
         break;
     }
   }
@@ -241,18 +228,26 @@ class PDFThumbnailViewer {
   }
 
   #scrollToDocumentContainer(pageNumber) {
+    // Find the thumbnail view corresponding to the page number.
     const thumbnailView = this._thumbnails.find(
       (thumb) => thumb.pageNumber === pageNumber
     );
-
     if (!thumbnailView) {
       console.error('scrollThumbnailIntoView: Invalid "pageNumber" parameter.');
       return;
     }
-
-    // Find the .document-container ancestor of thumbnailView.div
+  
+    // Update thumbnail highlighting.
+    if (pageNumber !== this._currentPageNumber) {
+      const prevThumbnailView = this._thumbnails[this._currentPageNumber - 1];
+      if (prevThumbnailView) {
+        prevThumbnailView.div.classList.remove(THUMBNAIL_SELECTED_CLASS);
+      }
+      thumbnailView.div.classList.add(THUMBNAIL_SELECTED_CLASS);
+    }
+  
+    // Find the document container for this thumbnail.
     const docContainer = thumbnailView.div.closest('.document-container');
-
     if (!docContainer) {
       console.error(
         'scrollThumbnailIntoView: Unable to find document container for page number:',
@@ -261,19 +256,49 @@ class PDFThumbnailViewer {
       return;
     }
 
-    // Optionally, handle highlighting of the document container
-    if (this._currentDocumentContainer) {
-      this._currentDocumentContainer.classList.remove(
-        'selected-document-container'
+    const thumbnailContainer = docContainer.querySelector('.thumbnails-container');
+    if (!thumbnailContainer) {
+      console.error(
+        'scrollThumbnailIntoView: Unable to find thumbnail container within document container for page number:',
+        pageNumber
       );
+      return;
     }
-    docContainer.classList.add('selected-document-container');
+  
+    // Update document container highlighting.
+    if (this._currentThumbnailContainer) {
+      this._currentThumbnailContainer.classList.remove(CONTAINER_SELECTED_CLASS);
+    }
+    thumbnailContainer.classList.add(CONTAINER_SELECTED_CLASS);
+    this._currentThumbnailContainer = thumbnailContainer;
     this._currentDocumentContainer = docContainer;
-
-    // Scroll the document container into view
-    scrollIntoView(docContainer, { top: THUMBNAIL_SCROLL_MARGIN });
-
-    // Update the current page number
+  
+    // Build an array of "views" representing all document containers.
+    // Each view object must have a `div` property and an `id`.
+    const docContainersViews = Array.from(this.container.children).map(child => ({
+      div: child,
+      id: child.id
+    }));
+  
+    // Use getVisibleElements to get the currently visible doc containers.
+    const visibleDocContainers = getVisibleElements({
+      scrollEl: this.container,
+      views: docContainersViews,
+    });
+  
+    // Check whether our target container is visible.
+    const isVisible = visibleDocContainers.views.some(view => view.id === docContainer.id);
+  
+    // If the container is not visible, scroll to center it.
+    if (!isVisible) {
+      const scrollParent = this.container; // In our case, the container is the scroll parent.
+      const parentHeight = scrollParent.clientHeight;
+      const containerTop = docContainer.offsetTop;
+      const containerHeight = docContainer.offsetHeight;
+      const desiredScrollTop = containerTop - (parentHeight / 2 - containerHeight / 2);
+      scrollParent.scrollTop = desiredScrollTop;
+    }
+    
     this._currentPageNumber = pageNumber;
   }
 
@@ -352,7 +377,7 @@ class PDFThumbnailViewer {
     if (args.documentsData && args.flatPages) {
       this.documentsData = args.documentsData;
 
-      this.#renumberDocsAndPages();
+      this.renumberDocsAndPages();
       // this.#renderDocumentContainers();
 
       // *** DEBUGGING *** 
@@ -495,9 +520,6 @@ class PDFThumbnailViewer {
   }
 
   #renderDocumentContainers() {
-    console.log("[renderDocumentContainers] about to clear container, current child count:", 
-    this.container.childNodes.length);
-
     // Clear existing thumbnails and containers
     this._thumbnails = [];
     this.container.textContent = '';
@@ -505,13 +527,33 @@ class PDFThumbnailViewer {
     const promises = [];
 
     for (const [docIndex, doc] of this.documentsData.entries()) {
-      // console.log(`Rendering docIndex=${docIndex}, docId=${doc.id}, pages=`, 
-      //   doc.pages.map(p => p.id));
-
       // Create a container for the document
       const docContainer = document.createElement('div');
       docContainer.classList.add('document-container');
       docContainer.id = doc.id;
+
+      // Checkbox
+      const selectDiv = document.createElement('div');
+      selectDiv.classList.add('document-select');
+
+      const selectLabel = document.createElement('label');
+      selectLabel.textContent = 'Select Document'; // This text will appear next to the checkbox
+      selectLabel.classList.add('checkmark-label');
+
+      const selectCheckbox = document.createElement('input');
+      selectCheckbox.type = 'checkbox';
+      selectCheckbox.id = `select-${doc.id}`; // Ensure this is unique
+
+      const checkmarkSpan = document.createElement('span');
+      checkmarkSpan.classList.add('checkmark');
+
+      // Append the checkbox and the custom checkmark span into the label
+      selectLabel.appendChild(selectCheckbox);
+      selectLabel.appendChild(checkmarkSpan);
+
+      selectDiv.appendChild(selectLabel);
+      docContainer.appendChild(selectDiv);
+
 
       // Create a form container (optional)
       const formContainer = document.createElement('div');
@@ -519,10 +561,9 @@ class PDFThumbnailViewer {
 
       // Create label and text input for File Name
       const fileNameLabel = document.createElement('label');
-      fileNameLabel.textContent = 'File Name';
+      fileNameLabel.textContent = 'Document Name';
       fileNameLabel.htmlFor = `file-name-${doc.id}`;
-      fileNameLabel.style.display = 'block'; // Add display block for styling
-
+      fileNameLabel.style.display = 'block';
       const fileNameInput = document.createElement('input');
       fileNameInput.type = 'text';
       fileNameInput.id = `file-name-${doc.id}`;
@@ -536,14 +577,14 @@ class PDFThumbnailViewer {
       const docTypeLabel = document.createElement('label');
       docTypeLabel.textContent = 'Document Type';
       docTypeLabel.htmlFor = `doc-type-${doc.id}`;
-      docTypeLabel.style.display = 'block'; // Add display block for styling
-      docTypeLabel.style.marginTop = '10px'; // Add margin for spacing
+      docTypeLabel.style.display = 'block';
+      docTypeLabel.style.marginTop = '10px';
 
       const docTypeSelect = document.createElement('select');
       docTypeSelect.id = `doc-type-${doc.id}`;
-      docTypeSelect.style.minWidth = '160px'; // Adjust width as needed
+      docTypeSelect.style.minWidth = '160px';
 
-      const docTypes = this._documenTypes; // Example document types
+      const docTypes = this._documenTypes;
       for (const type of docTypes) {
         const option = document.createElement('option');
         option.value = type;
@@ -568,29 +609,40 @@ class PDFThumbnailViewer {
       optionsContainer.classList.add('document-container-options');
 
       // Create and append new "Extract" div
-      const extractDiv = document.createElement('div');
-      extractDiv.textContent = 'Extract';
-      extractDiv.classList.add('document-extract');
-      extractDiv.addEventListener('click', (event) => {
+      const extractIcon = document.createElement('img');
+      extractIcon.src = 'images/book-sparkles-solid.svg';
+      extractIcon.alt = 'Extract data';
+      extractIcon.title = 'Extract data';
+      extractIcon.classList.add('document-container-svg-button');
+      extractIcon.addEventListener('click', (event) => {
         const docId = doc.id;
         const documentData = this.documentsData.find((d) => d.id === docId);
         const pageNumbers = documentData.pages.map((page) => page.pageNumber);
         this.eventBus.dispatch('document-container-extract', { source: this, docId, pageNumbers });
       });
-      optionsContainer.appendChild(extractDiv);
+      optionsContainer.appendChild(extractIcon);
 
       // Create Delete Icon Image
       const deleteIcon = document.createElement('img');
       deleteIcon.src = 'images/action-trash.png'; // Update with the correct path
       deleteIcon.alt = 'Delete';
+      deleteIcon.title = 'Delete';
+      deleteIcon.style.display = 'none';
       deleteIcon.classList.add('icon-delete');
+      deleteIcon.addEventListener('click', (event) => {
+        event.stopPropagation();
+        this.removeDocumentContainer(doc.id);
+      });
 
       // Create Download Icon Image
       const downloadIcon = document.createElement('img');
       downloadIcon.src = 'images/action-download.png'; // Update with the correct path
       downloadIcon.alt = 'Download';
+      downloadIcon.title = 'Download';
       downloadIcon.classList.add('icon-download');
       downloadIcon.addEventListener('click', (event) => {
+        event.stopPropagation();
+
         const docId = doc.id;
         const documentData = this.documentsData.find((d) => d.id === docId);
         const pageNumbers = documentData.pages.map((page) => page.pageNumber);
@@ -632,6 +684,7 @@ class PDFThumbnailViewer {
         // Ensure the pdfPage is loaded and set it to the thumbnail
         const promise = this.pdfDocument.getPage(pageNumber).then((pdfPage) => {
           thumbnail.setPdfPage(pdfPage);
+          thumbnail.rotation = pdfPage.rotate;
         });
 
         promises.push(promise);
@@ -675,33 +728,145 @@ class PDFThumbnailViewer {
       this.container.appendChild(docContainer);
 
       // Make the thumbnails container sortable
-      Sortable.create(thumbnailsContainer, {
+      const sortableInstance = Sortable.create(thumbnailsContainer, {
         group: 'shared', // Allow dragging between containers
         animation: 150,
         ghostClass: 'sortable-ghost',
         chosenClass: 'sortable-chosen',
+        disabled: true,
         onEnd: (evt) => {
-          // Handle the drag and drop event
           this._onThumbnailDrop(evt);
         },
       });
+      this.sortableInstances[doc.id] = sortableInstance;
     }
+
+    // Ensure that the current thumbnail is always highlighted on load.
+    const thumbnailView = this._thumbnails[this._currentPageNumber - 1];
+    thumbnailView.div.classList.add(THUMBNAIL_SELECTED_CLASS);
 
     Promise.all(promises).then(() => {
       this.renderingQueue.renderHighestPriority();
       this.eventBus.dispatch('thumbnailsready', { source: this });
-      
-      // // After all thumbnails are set up, apply rotation re-rendering if needed.
-      // for (const thumbnail of this._thumbnails) {
-      //   const rotation = thumbnail.pdfPage ? thumbnail.pdfPage.rotate : 0;
-      //   if (rotation && rotation !== 0) {
-      //     thumbnail.reRenderWithRotation(rotation).catch(err => {
-      //       console.error("Error in reRenderWithRotation:", err);
-      //     });
-      //   }
-      // }
     });
   }
+
+  enableDragAndDrop(flag) {
+    Object.values(this.sortableInstances).forEach(instance => {
+      instance.option('disabled', !flag);
+    });
+  }
+
+  getSelectedDocumentContainerIds() {
+    const selectedIds = [];
+    const docContainers = this.container.querySelectorAll('.document-container');
+    docContainers.forEach((docContainer) => {
+      const checkbox = docContainer.querySelector('input[type="checkbox"]');
+      if (checkbox && checkbox.checked) {
+        selectedIds.push(docContainer.id);
+      }
+    });
+    return selectedIds;
+  }
+
+  toggleAllCheckboxes(selectAll) {
+    const checkboxes = document.querySelectorAll('.document-container input[type="checkbox"]');
+    checkboxes.forEach(checkbox => {
+      checkbox.checked = selectAll;
+    });
+  }
+
+  toggleDeleteIcons(show) {
+    const docContainers = document.querySelectorAll('.document-container');
+    docContainers.forEach((container) => {
+      const deleteIcon = container.querySelector('.icon-delete');
+      if (deleteIcon) {
+        deleteIcon.style.display = show ? 'flex' : 'none';
+      }
+    });
+  }
+
+  removeDocumentContainer(docId, autoScroll=true) {
+    const docContainer = document.getElementById(docId);
+    if (docContainer) {
+      docContainer.remove();
+    }
+    
+    const docIndex = this.documentsData.findIndex(d => d.id === docId);
+    if (docIndex !== -1) {
+      this.documentsData.splice(docIndex, 1);
+    }
+    
+    // this._thumbnails = this._thumbnails.filter(thumb => !thumb.id.startsWith(docId));
+
+    if (autoScroll) {
+      const currentScrollTop = this.container.scrollTop;
+      this.container.scrollTop = currentScrollTop + 1;
+      this.container.scrollTop = currentScrollTop;
+    }
+  }
+
+  getDocumentName(docId) {
+    const fileNameInput = this.container.querySelector(`#file-name-${docId}`);
+    if (fileNameInput) {
+      return fileNameInput.value;
+    }
+    return null;
+  }
+
+  formatToFilename(input) {
+    return input
+      .trim()
+      .split(/\s+/)
+      .join('_')
+      .toLowerCase();
+  }
+
+  resetSelectAll() {
+    const mainCheckbox = document.querySelector('#select-all-container input[type="checkbox"]');
+    mainCheckbox.checked = false;
+    this.toggleAllCheckboxes(false);
+  }
+
+  updateThumbnailButtonsVisibility(flag) {
+    // Select all actions containers within thumbnails
+    const thumbnailsActions = document.querySelectorAll('.thumbnail .actions');
+    
+    thumbnailsActions.forEach(actionsDiv => {
+      // Get all buttons within this actions container
+      const buttons = actionsDiv.querySelectorAll('.action-button');
+  
+      buttons.forEach(button => {
+        // Find the icon image inside the button
+        const iconImg = button.querySelector('img.icon');
+        if (!iconImg) return;
+  
+        if (flag) {
+          // In non-VIEW mode, show all action buttons
+          button.style.display = 'inline-flex';
+        } else {
+          // Hide button if its icon is not the download icon
+          if (!iconImg.classList.contains('download-icon')) {
+            button.style.display = 'none';
+          } else {
+            button.style.display = 'inline-flex'; // Show download icon
+          }
+        }
+      });
+    });
+  
+    // Hide/show the delete button for document containers separately
+    const containerDeleteButtons = document.querySelectorAll('.document-container .icon-delete');
+    containerDeleteButtons.forEach(btn => {
+      if (flag) {
+        btn.style.display = 'inline-flex'; // Show delete buttons in edit mode
+      } else {
+        btn.style.display = 'none';        // Hide delete buttons in view mode
+      }
+    });
+  }
+  
+  // Call this function whenever EditorState changes.
 
   #updateDocumentUI(docId) {
     const docContainer = this.container.querySelector(`#${docId}`);
@@ -788,105 +953,218 @@ class PDFThumbnailViewer {
 
   // Function to add a new empty document container at the beginning
   addNewEmptyDocumentContainer() {
+    // Create a new empty document object.
     const newDoc = {
       id: this.#generateUniqueId(),
       document: '',        // Empty file name
-      document_type: '',   // Default document type
-      pages: [],           // Empty pages array
+      document_type: '',   // No document type selected
+      pages: []            // No pages yet
     };
-
-    // Insert the new document at the beginning of documentsData
+  
+    // Insert the new document at the beginning of the documentsData array.
     this.documentsData.unshift(newDoc);
-
-    // Create a new document container and insert it at the beginning of the container
+  
+    // Create the main document container.
     const docContainer = document.createElement('div');
     docContainer.classList.add('document-container');
     docContainer.id = newDoc.id;
-
-    // Create the form container with file input and document type
+  
+    // --- Checkbox Section ---
+    const selectDiv = document.createElement('div');
+    selectDiv.classList.add('document-select');
+  
+    const selectLabel = document.createElement('label');
+    selectLabel.textContent = 'Select Document';
+    selectLabel.classList.add('checkmark-label');
+  
+    const selectCheckbox = document.createElement('input');
+    selectCheckbox.type = 'checkbox';
+    selectCheckbox.id = `select-${newDoc.id}`;
+  
+    const checkmarkSpan = document.createElement('span');
+    checkmarkSpan.classList.add('checkmark');
+  
+    // Append checkbox and custom checkmark into the label.
+    selectLabel.appendChild(selectCheckbox);
+    selectLabel.appendChild(checkmarkSpan);
+    selectDiv.appendChild(selectLabel);
+    docContainer.appendChild(selectDiv);
+  
+    // --- Form Container (Document Name and Document Type) ---
     const formContainer = document.createElement('div');
     formContainer.classList.add('form-container');
-
-    // Create label and text input for File Name
+  
+    // Document Name input.
     const fileNameLabel = document.createElement('label');
-    fileNameLabel.textContent = 'File Name:';
+    fileNameLabel.textContent = 'Document Name';
     fileNameLabel.htmlFor = `file-name-${newDoc.id}`;
-    fileNameLabel.style.display = 'block'; // Add display block for styling
-
+    fileNameLabel.style.display = 'block';
+  
     const fileNameInput = document.createElement('input');
     fileNameInput.type = 'text';
     fileNameInput.id = `file-name-${newDoc.id}`;
-    fileNameInput.value = ''; // Empty value for new document
-    fileNameInput.style.width = '100%'; // Adjust width as needed
-
-    // Append label and input to the form container
+    fileNameInput.value = ''; // Empty for a new document
+  
     formContainer.appendChild(fileNameLabel);
     formContainer.appendChild(fileNameInput);
-
-    // Create label and dropdown for Document Type
+  
+    // Document Type dropdown.
     const docTypeLabel = document.createElement('label');
-    docTypeLabel.textContent = 'Document Type:';
+    docTypeLabel.textContent = 'Document Type';
     docTypeLabel.htmlFor = `doc-type-${newDoc.id}`;
-    docTypeLabel.style.display = 'block'; // Add display block for styling
-    docTypeLabel.style.marginTop = '10px'; // Add margin for spacing
-
+    docTypeLabel.style.display = 'block';
+    docTypeLabel.style.marginTop = '10px';
+  
     const docTypeSelect = document.createElement('select');
     docTypeSelect.id = `doc-type-${newDoc.id}`;
-    docTypeSelect.style.minWidth = '160px'; // Adjust width as needed
-
-    // Add options to the select element
-    const docTypes = this._documenTypes; // Example document types
+    docTypeSelect.style.minWidth = '160px';
+  
+    // Populate the select element with document types.
+    const docTypes = this._documenTypes;
     for (const type of docTypes) {
       const option = document.createElement('option');
       option.value = type;
       option.textContent = type;
       docTypeSelect.appendChild(option);
     }
-
-    // Set the selected value to default or empty
+    // Set to default (empty) value.
     docTypeSelect.value = '';
-
-    // Append label and select to the form container
+  
     formContainer.appendChild(docTypeLabel);
     formContainer.appendChild(docTypeSelect);
-
-    // Append the form container to the document container
     docContainer.appendChild(formContainer);
-
-    // Create a container for the thumbnails (empty for new document)
+  
+    // --- Options Container (Extract, Delete, Download) ---
+    const optionsContainer = document.createElement('div');
+    optionsContainer.classList.add('document-container-options');
+  
+    // Extract button.
+    const extractIcon = document.createElement('img');
+    extractIcon.src = 'images/book-sparkles-solid.svg';
+    extractIcon.alt = 'Extract data';
+    extractIcon.title = 'Extract data';
+    extractIcon.classList.add('document-container-svg-button');
+    extractIcon.addEventListener('click', (event) => {
+      const docId = doc.id;
+      const documentData = this.documentsData.find((d) => d.id === docId);
+      const pageNumbers = documentData.pages.map((page) => page.pageNumber);
+      this.eventBus.dispatch('document-container-extract', { source: this, docId, pageNumbers });
+    });
+    optionsContainer.appendChild(extractIcon);
+  
+    // Delete icon.
+    const deleteIcon = document.createElement('img');
+    deleteIcon.src = 'images/action-trash.png';
+    deleteIcon.alt = 'Delete';
+    deleteIcon.title = 'Delete';
+    deleteIcon.classList.add('icon-delete');
+    deleteIcon.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const docId = newDoc.id;
+      const containerToRemove = document.getElementById(docId);
+      if (containerToRemove) {
+        containerToRemove.remove();
+      }
+      const docIndex = this.documentsData.findIndex((d) => d.id === docId);
+      if (docIndex !== -1) {
+        this.documentsData.splice(docIndex, 1);
+      }
+      // Adjust scroll position (forces a reflow).
+      const currentScrollTop = this.container.scrollTop;
+      this.container.scrollTop = currentScrollTop + 1;
+      this.container.scrollTop = currentScrollTop;
+    });
+    optionsContainer.appendChild(deleteIcon);
+  
+    // Download icon.
+    const downloadIcon = document.createElement('img');
+    downloadIcon.src = 'images/action-download.png';
+    downloadIcon.alt = 'Download';
+    downloadIcon.title = 'Download';
+    downloadIcon.classList.add('icon-download');
+    downloadIcon.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const docId = newDoc.id;
+      const documentData = this.documentsData.find((d) => d.id === docId);
+      const pageNumbers = documentData.pages.map((page) => page.pageNumber);
+      this.eventBus.dispatch('document-container-download', { source: this, docId, pageNumbers });
+    });
+    optionsContainer.appendChild(downloadIcon);
+    docContainer.appendChild(optionsContainer);
+  
+    // --- Thumbnails Container (empty for a new document) ---
     const thumbnailsContainer = document.createElement('div');
     thumbnailsContainer.classList.add('thumbnails-container');
     thumbnailsContainer.style.display = 'flex';
     thumbnailsContainer.style.flexWrap = 'wrap';
-    thumbnailsContainer.style.marginTop = '15px'; // Add margin for spacing
     docContainer.appendChild(thumbnailsContainer);
-
-    // Insert the new document container at the beginning of the main container
+  
+    // --- Status Area (Progress bar, progress description, error message with retry) ---
+    const statusContainer = document.createElement('div');
+    statusContainer.classList.add('document-status-container');
+  
+    const progressBar = document.createElement('progress');
+    progressBar.classList.add('document-progress-bar');
+    progressBar.value = 0;
+    progressBar.max = 100;
+    progressBar.style.display = 'none';
+  
+    const progressDescription = document.createElement('div');
+    progressDescription.classList.add('document-progress-description');
+    progressDescription.textContent = 'Extracting data...';
+    progressDescription.style.display = 'none';
+  
+    const errorContainer = document.createElement('div');
+    errorContainer.classList.add('document-error-container');
+    errorContainer.style.display = 'none';
+    errorContainer.textContent = 'An error occurred extracting data. Please try again.';
+  
+    const retryButton = document.createElement('button');
+    retryButton.textContent = 'Retry';
+    retryButton.addEventListener('click', async () => {
+      const docId = newDoc.id;
+      this.eventBus.dispatch('document-container-retry', { source: this, docId });
+    });
+    errorContainer.appendChild(retryButton);
+  
+    statusContainer.appendChild(progressBar);
+    statusContainer.appendChild(progressDescription);
+    statusContainer.appendChild(errorContainer);
+    docContainer.appendChild(statusContainer);
+  
+    // --- Append the Document Container ---
     this.container.insertBefore(docContainer, this.container.firstChild);
-
-    // Make the thumbnails container sortable
-    Sortable.create(thumbnailsContainer, {
+  
+    // --- Enable Drag & Drop on the Thumbnails Container ---
+    const sortableInstance = Sortable.create(thumbnailsContainer, {
       group: 'shared', // Allow dragging between containers
       animation: 150,
       ghostClass: 'sortable-ghost',
       chosenClass: 'sortable-chosen',
       onEnd: (evt) => {
-        // Handle the drag and drop event
         this._onThumbnailDrop(evt);
       },
     });
-
+    this.sortableInstances[newDoc.id] = sortableInstance;
+  
+    // Scroll the new document container into view.
     scrollIntoView(docContainer, { top: THUMBNAIL_SCROLL_MARGIN });
   }
 
   _onSelectThumbnail(evt) {
-    const { source, id } = evt;
-    const thumbnail = source;
-    const docContainer = thumbnail.div.closest('.document-container');
-    const docId = docContainer.id;
-    this._selectedThumbnail = source;
+    switch (PDFViewerApplication.viewState) {
+      case ViewType.NORMAL:
+        return;
+      case ViewType.GROUPED:
+        const { source, id } = evt;
+        const thumbnail = source;
+        const docContainer = thumbnail.div.closest('.document-container');
+        const docId = docContainer.id;
+        this._selectedThumbnail = source;
+        this.#displayDocumentForm(docId);
 
-    this.#displayDocumentForm(docId);
+        break;
+    }
   }
 
   async _onDeleteThumbnail(evt) {
@@ -981,10 +1259,9 @@ class PDFThumbnailViewer {
   }
 
   _onRotateThumbnail(evt) {
-    const { source } = evt; // 'source' is the thumbnail
+    const { source } = evt;
     const thumbnail = source;
   
-    // 1) Find the associated doc/page in documentsData
     const docContainer = thumbnail.div.closest('.document-container');
     const docId = docContainer?.id;
     if (!docId) return;
@@ -995,24 +1272,18 @@ class PDFThumbnailViewer {
     const page = doc.pages.find(p => p.id === thumbnail.id);
     if (!page) return;
   
-    // 2) Increment rotation by 90°, wrapping at 360
-    //    If the thumbnail has a current rotation, use that; otherwise fallback to 0.
     const newRotation = ((thumbnail.rotation || 0) + 90) % 360;
-  
-    // 3) Store the new rotation in documentsData
     page.rotation = newRotation;
   
-    // 4) Re-render the thumbnail with the new rotation
     thumbnail.reRenderWithRotation(newRotation)
       .catch(err => {
         console.error("Error in reRenderWithRotation:", err);
       });
   
-    // 5) Optionally re-queue rendering (if you want to ensure highest priority drawing)
     this.renderingQueue.renderHighestPriority();
   }
 
-  #renumberDocsAndPages() {
+  renumberDocsAndPages() {
     // If you prefer doc-local page numbering, reset to 1 inside each doc loop.
     // If you prefer *global* numbering across all docs, use a single counter outside.
     let globalPageNumber = 1;

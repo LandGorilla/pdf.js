@@ -20,6 +20,7 @@
 /** @typedef {import("../src/display/api.js").PDFDocumentLoadingTask} PDFDocumentLoadingTask */
 
 import { PDFDocument, degrees } from 'https://cdn.jsdelivr.net/npm/pdf-lib/+esm';
+import { zipSync } from "https://cdn.skypack.dev/fflate";
 import {
   animationStarted,
   apiPageLayoutToViewerModes,
@@ -97,7 +98,7 @@ const FORCE_PAGES_LOADED_TIMEOUT = 10000; // ms
 
 const ViewOnLoad = {
   UNKNOWN: -1,
-  PREVIOUS: 0, // Default value.
+  PREVIOUS: 0,
   INITIAL: 1,
 };
 
@@ -1181,25 +1182,45 @@ const PDFViewerApplication = {
   },
 
   refreshOptions() {
+    const sidebarLeftAction = document.getElementById("sidebar-left-actions");
+
     switch (this.viewState) {
       case ViewType.NORMAL:
-        document.getElementById("classify-documents-button").style.display = "block";
+        document.getElementById("classify-documents-button").style.display = "flex";
+        document.getElementById("extract-data-from-documents").style.display = "none";
+        document.getElementById("edit-pdf").style.display = "none";
+        document.getElementById("add-container-button").style.display = "none";
+        document.getElementById("apply-changes-button").style.display = "none";
+        document.getElementById("select-all-container").style.display = "none";
         document.getElementById("open-sidebar-options").style.display = "none";
+        sidebarLeftAction.style.justifyContent = "flex-end";
         break;
       case ViewType.GROUPED:
         document.getElementById("classify-documents-button").style.display = "none";
-        document.getElementById("open-sidebar-options").style.display = "block";
+        document.getElementById("extract-data-from-documents").style.display = "flex";
+        document.getElementById("edit-pdf").style.display = "flex";
+        document.getElementById("add-container-button").style.display = "flex";
+        document.getElementById("select-all-container").style.display = "flex";
+        document.getElementById("open-sidebar-options").style.display = "flex";
+        sidebarLeftAction.style.justifyContent = 'space-between';
+
+        switch (this.editorState) {
+          case EditorState.VIEW:
+            document.getElementById("apply-changes-button").style.display = "none";
+            document.getElementById("edit-pdf").style.display = "flex";
+            break;
+          case EditorState.EDIT:
+            document.getElementById("apply-changes-button").style.display = "flex";
+            document.getElementById("edit-pdf").style.display = "none";
+            break;
+        }
+
         break;
     }
 
-    switch (this.editorState) {
-      case EditorState.VIEW:
-        document.getElementById("apply-changes-button").style.display = "none";
-        break;
-      case EditorState.EDIT:
-        document.getElementById("apply-changes-button").style.display = "block";
-        break;
-    }
+    this.pdfThumbnailViewer?.enableDragAndDrop(this.editorState == EditorState.EDIT);
+    this.pdfThumbnailViewer?.updateThumbnailButtonsVisibility(this.editorState == EditorState.EDIT);
+    this.pdfThumbnailViewer?.toggleDeleteIcons(this.editorState == EditorState.EDIT);
   },
 
   async searchDocumentsInFile() {
@@ -1294,45 +1315,64 @@ const PDFViewerApplication = {
     return pdfBlob;
   },
 
-  async extractDataFromDocument() {
-    const pages = this.getCurrentDocumentsAndPages();
-    console.log("Current documents and their pages:", JSON.stringify(pages, null, 2));
+  async extractDataForSelectedDocuments() {
+    const docIds = this.pdfThumbnailViewer?.getSelectedDocumentContainerIds();
+    if (docIds.length > 0) {
+      await this.extractDataFromDocuments(docIds);
+    }
+  },
+
+  async extractDataFromDocuments(docIds) {
+    const allDocs = this.getCurrentDocumentsAndPages();
+    let docsToProcess = allDocs;
+    if (docIds) {
+      docsToProcess = allDocs.filter(docData => docIds.includes(docData.docId));
+    }
+    
+    console.log(
+      "Extracting data from the following documents:",
+      JSON.stringify(docsToProcess, null, 2)
+    );
   
     try {
-  
+      // Create a concurrency queue. You can adjust the concurrency level as needed.
       const queue = new ConcurrencyQueue(3);
   
-      for (const docData of pages) {
+      // For each document selected for processing…
+      for (const docData of docsToProcess) {
         const docId = docData.docId;
+        // Set the document's state and progress to indicate processing has started.
         this.pdfThumbnailViewer?.setDocumentState(docId, 'processing');
         this.pdfThumbnailViewer?.setDocumentProgress(docId, 0);
-
+  
+        // Define a task that processes the document.
         const task = async () => {
           return this.processDocument(docId, docData);
         };
-
+  
+        // Wrap the task so that errors are caught and logged.
         const wrappedTask = () =>
           task()
             .then(result => {
-              // The doc is already set to 'done' inside `processDocument`
+              // The document state is set to 'done' inside processDocument.
               return result;
             })
             .catch(error => {
-              // We set doc to 'error' inside `processDocument` as well
-              // But any additional logging or fallback can happen here.
-              console.error(`Error in wrappedTask for doc ${docId}:`, error);
-              return null; // Or re-throw if desired.
+              console.error(`Error processing doc ${docId}:`, error);
+              return null; // Alternatively, you could re-throw the error.
             });
   
+        // Add the wrapped task to the queue.
         queue.addTask(wrappedTask);
       }
   
-      // Run all tasks in the queue with concurrency=2
+      // Run all tasks in the queue.
       const results = await queue.run();
-      console.log('All documents have been analyzed:', results);
-  
+      console.log('All selected documents have been analyzed:', results);
+      return results;
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error processing selected documents:', error);
+      throw error;
     }
   },
 
@@ -1402,6 +1442,74 @@ const PDFViewerApplication = {
       control.accelerate = true;
       await progressSimPromise;
       throw error;
+    }
+  },
+
+  async deleteSelectedDocuments() {
+    const docIds = this.pdfThumbnailViewer?.getSelectedDocumentContainerIds();
+    for (const docId of docIds) {
+      this.pdfThumbnailViewer?.removeDocumentContainer(docId, false);
+    }
+    // this.pdfThumbnailViewer?.forceRendering();
+    await this.applyChanges();
+
+    this.pdfThumbnailViewer?.resetSelectAll();
+  },
+
+  async createZipBlob(files) {
+    const filesData = {};
+    for (const { filename, blob } of files) {
+      const buffer = await blob.arrayBuffer();
+      filesData[filename] = new Uint8Array(buffer);
+    }
+    const zipped = zipSync(filesData);
+    return new Blob([zipped], { type: "application/zip" });
+  },
+
+  async downloadSelectedDocuments() {
+    const docIds = this.pdfThumbnailViewer?.getSelectedDocumentContainerIds();
+    const pdfFiles = await Promise.all(
+      docIds.map(async (docId) => {
+        // Get your document data and pages, then extract the PDF Blob.
+        const documentData = this.pdfThumbnailViewer?.documentsData.find((d) => d.id === docId);
+        const pageNumbers = documentData.pages.map((page) => page.pageNumber);
+        const blob = await PDFViewerApplication.extractPagesFromPdf(pageNumbers);
+        
+        // Retrieve and format the document name.
+        const docName = this.pdfThumbnailViewer?.getDocumentName(docId) || docId;
+        const formattedName = this.pdfThumbnailViewer?.formatToFilename(docName) || docName;
+        
+        return { filename: `${formattedName}.pdf`, blob };
+      })
+    );
+  
+    if (pdfFiles.length === 0) {
+      console.warn("No PDFs were generated.");
+      return;
+    }
+  
+    // If there's only one PDF, download it directly.
+    if (pdfFiles.length === 1) {
+      const { filename, blob } = pdfFiles[0];
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } else {
+      // Otherwise, create a zip file containing all PDFs.
+      const zipBlob = await this.createZipBlob(pdfFiles);
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "documents.zip";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     }
   },
 
@@ -1643,7 +1751,10 @@ const PDFViewerApplication = {
       const rotateVal = pageRotationMap[pageNum] || 0;
   
       if (rotateVal) {
-        pdfPage.setRotation(degrees(rotateVal)); 
+        const angle = degrees(rotateVal);
+        console.log("generatePDF rotateVal: " + rotateVal);
+        console.log("generatePDF angle: " + angle);
+        pdfPage.setRotation(angle); 
       }
   
       newPdf.addPage(pdfPage);
@@ -2514,10 +2625,13 @@ const PDFViewerApplication = {
     }
 
     document.getElementById("classify-documents-button").addEventListener("click", this.searchDocumentsInFile.bind(this));
-    document.getElementById("create-document-container-button").addEventListener("click", this.createDocumentContainer.bind(this));
-    document.getElementById("extract-data-from-documents").addEventListener("click", this.extractDataFromDocument.bind(this));
+    document.getElementById("add-container-button").addEventListener("click", this.createDocumentContainer.bind(this));
+    document.getElementById("extract-data-from-documents").addEventListener("click", this.extractDataFromDocuments.bind(this));
     document.getElementById("edit-pdf").addEventListener("click", this.editPDF.bind(this));
     document.getElementById("apply-changes-button").addEventListener("click", this.applyChanges.bind(this));
+    document.getElementById("extract-data-from-documents-option").addEventListener("click", this.extractDataForSelectedDocuments.bind(this));
+    document.getElementById("delete-document-option").addEventListener("click", this.deleteSelectedDocuments.bind(this));
+    document.getElementById("download-document-option").addEventListener("click", this.downloadSelectedDocuments.bind(this));
 
     this.bindDropdownEvents();
   },
@@ -3065,10 +3179,13 @@ async function onDocumentContainerRetry({ source, docId }) {
 async function onDocumentContainerDownload({ source, docId, pageNumbers }) {
   const blob = await PDFViewerApplication.extractPagesFromPdf(pageNumbers);
 
+  const docName = this.pdfThumbnailViewer?.getDocumentName(docId);
+  const formattedName = this.pdfThumbnailViewer?.formatToFilename(docName);
+
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `page-extracted_pages.pdf`;
+  a.download = `${formattedName}.pdf`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -3198,6 +3315,7 @@ function onRotationChanging(evt) {
 }
 
 function onPageChanging({ pageNumber, pageLabel }) {
+  console.log("onPageChanging");
   this.toolbar?.setPageNumber(pageNumber, pageLabel);
   this.secondaryToolbar?.setPageNumber(pageNumber);
 

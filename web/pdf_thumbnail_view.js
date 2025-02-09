@@ -78,7 +78,7 @@ class PDFThumbnailView {
 
     // Create the anchor element
     const anchor = document.createElement("a");
-    anchor.href = linkService.getAnchorUrl("#page=" + id);
+    // anchor.href = linkService.getAnchorUrl("#page=" + id);
     anchor.setAttribute("data-l10n-id", "pdfjs-thumb-page-title");
     anchor.setAttribute("data-l10n-args", this.#pageL10nArgs);
 
@@ -128,10 +128,10 @@ class PDFThumbnailView {
   
     // Define your icons
     const buttons = [
-      { class: "trash-icon", src: "./images/action-trash.png", tooltip: "Delete Page" },
-      { class: "copy-icon", src: "./images/action-copy.png", tooltip: "Copy Page" },
-      { class: "download-icon", src: "./images/action-download.png", tooltip: "Download Page" },
-      { class: "rotate-icon", src: "./images/action-rotate.png", tooltip: "Rotate PDF" },
+      { class: "trash-icon", src: "./images/action-trash.png", tooltip: "Delete Page", display: false },
+      { class: "copy-icon", src: "./images/action-copy.png", tooltip: "Copy Page", display: false },
+      { class: "rotate-icon", src: "./images/action-rotate.png", tooltip: "Rotate PDF", display: false },
+      { class: "download-icon", src: "./images/action-download.png", tooltip: "Download Page", display: true },
     ];
   
     // Build each button
@@ -139,6 +139,7 @@ class PDFThumbnailView {
       const button = document.createElement("button");
       button.className = "action-button";
       button.title = btn.tooltip;
+      button.style.display = btn.display ? 'block' : 'none';
       button.setAttribute("aria-label", btn.tooltip);
   
       const iconImg = document.createElement("img");
@@ -167,6 +168,8 @@ class PDFThumbnailView {
   }
 
   reRenderWithRotation(newRotation) {
+    console.log('>> currentRotation: ' + this.rotation);
+    console.log('>> newRotation: ' + newRotation);
     // 1) Set the user rotation.
     this.rotation = newRotation;
     this.viewport = this.pdfPage.getViewport({ scale: 1, rotation: newRotation });
@@ -207,6 +210,20 @@ class PDFThumbnailView {
     const { style } = this.div;
     style.setProperty("--thumbnail-width", `${this.canvasWidth}px`);
     style.setProperty("--thumbnail-height", `${this.canvasHeight}px`);
+
+
+
+    // OLD
+    // const { width, height } = this.viewport;
+    // const ratio = width / height;
+
+    // this.canvasWidth = THUMBNAIL_WIDTH;
+    // this.canvasHeight = (this.canvasWidth / ratio) | 0;
+    // this.scale = this.canvasWidth / width;
+
+    // const { style } = this.div;
+    // style.setProperty("--thumbnail-width", `${this.canvasWidth}px`);
+    // style.setProperty("--thumbnail-height", `${this.canvasHeight}px`);
   }
 
   setPdfPage(pdfPage) {

@@ -72,7 +72,7 @@
   --treeitem-selected-color: rgb(0 0 0 / 0.9);
   --treeitem-selected-bg-color: rgb(0 0 0 / 0.25);
   --thumbnail-hover-color: rgb(0 0 0 / 0.1);
-  --thumbnail-selected-color: rgb(0 0 0 / 0.2);
+  --thumbnail-selected-color: rgb(209, 239, 254);
   --doorhanger-bg-color: rgb(255 255 255);
   --doorhanger-border-color: rgb(12 12 13 / 0.2);
   --doorhanger-hover-color: rgb(12 12 13);
@@ -98,6 +98,9 @@
   --toolbarButton-zoomIn-icon: url(images/toolbarButton-zoomIn.svg);
   --toolbarButton-presentationMode-icon: url(images/toolbarButton-presentationMode.svg);
   --toolbarButton-print-icon: url(images/toolbarButton-print.svg);
+  --toolbarButton-folderplus-icon: url(images/folder-plus.svg);
+  --toolbarButton-booksparkle-icon: url(images/book-sparkles-solid.svg);
+  --toolbarButton-separate-documents-icon: url(images/object-ungroup-solid.svg);
   /*#if GENERIC*/
   --toolbarButton-openFile-icon: url(images/toolbarButton-openFile.svg);
   /*#endif*/
@@ -124,9 +127,7 @@
   --secondaryToolbarButton-spreadNone-icon: url(images/secondaryToolbarButton-spreadNone.svg);
   --secondaryToolbarButton-spreadOdd-icon: url(images/secondaryToolbarButton-spreadOdd.svg);
   --secondaryToolbarButton-spreadEven-icon: url(images/secondaryToolbarButton-spreadEven.svg);
-  --secondaryToolbarButton-imageAltTextSettings-icon: var(
-    --toolbarButton-editorStamp-icon
-  );
+  --secondaryToolbarButton-imageAltTextSettings-icon: var(--toolbarButton-editorStamp-icon);
   --secondaryToolbarButton-documentProperties-icon: url(images/secondaryToolbarButton-documentProperties.svg);
   --editorParams-stampAddImage-icon: url(images/toolbarButton-zoomIn.svg);
 
@@ -140,6 +141,10 @@
   --right-sidebar-width: 420px;
   --right-sidebar-transition-duration: 200ms;
   --right-sidebar-transition-timing-function: ease;
+
+  --separate-documents-icon: url(images/object-ungroup-solid.svg);
+  --extract-data-icon: url(images/book-sparkles-solid.svg);
+  --edit-pdf-icon: url(images/solid-file-pdf-pen.svg);
 }
 
 :root:dir(rtl) {
@@ -181,7 +186,7 @@
     --treeitem-selected-color: rgb(255 255 255 / 0.9);
     --treeitem-selected-bg-color: rgb(255 255 255 / 0.25);
     --thumbnail-hover-color: rgb(255 255 255 / 0.1);
-    --thumbnail-selected-color: rgb(255 255 255 / 0.2);
+    --thumbnail-selected-color: rgb(209, 239, 254);
     --doorhanger-bg-color: rgb(74 74 79);
     --doorhanger-border-color: rgb(39 39 43);
     --doorhanger-hover-color: rgb(249 249 250);
@@ -768,7 +773,7 @@ body {
   height: var(--thumbnail-height);
   margin: 5px 5px;
   padding: 1px;
-  border: 7px solid transparent;
+  border: 5px solid transparent;
   border-radius: 2px;
 }
 
@@ -1782,7 +1787,8 @@ dialog :link {
 .document-container {
   width: 100%;
   padding-bottom: 30px;
-  padding-top: 20px;
+  padding-top: 0px;
+  margin-bottom: 20px;
   border-bottom: 1px;
   border-bottom-color: white;
   border-bottom-style: solid;
@@ -1797,6 +1803,11 @@ dialog :link {
   border-radius: 10px;
   margin-top: 5px;
   min-height: 150px;
+  box-sizing: border-box;
+}
+
+.thumbnails-container.selected {
+  border: 2px dashed var(--thumbnail-selected-color) !important;
 }
 
 .thumbnail .actions {
@@ -1804,6 +1815,8 @@ dialog :link {
   bottom: 0px;
   flex-wrap: nowrap;
   display: none;
+  width: 100%;
+  background: rgba(50, 50, 50);
 }
 
 .thumbnail[data-loaded="true"] .actions {
@@ -1811,7 +1824,7 @@ dialog :link {
 }
 
 .action-button {
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(50, 50, 50);
   border: none;
   padding: 4px 8px;
   cursor: pointer;
@@ -1909,17 +1922,13 @@ dialog :link {
   
 }
 
-#classify-documents-button {
-  color: white;
-}
-
 #sidebar-left-actions {
   background-color: var(--toolbar-bg-color);
   display: flex;
   gap: 10px;
   height: var(--toolbar-height);
   width: 100%;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   font: message-box;
   color: white;
@@ -1934,6 +1943,46 @@ dialog :link {
 .sidebar-left-action {
   width: 24px;
   height: 24px;
+}
+
+#select-all-container {
+  margin-left: 30px;
+}
+
+.customToolbarButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  box-sizing: border-box;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.customToolbarButton:hover {
+  background-color: rgb(102,102,103);
+}
+
+.customToolbarButton img {
+  display: block;
+  width: 14px;
+  height: 14px;
+  filter: invert(1);
+}
+
+#add-container-button img {
+  display: block;
+  width: 16px;
+  height: 16px;
+  filter: saturate(0) !important;
+}
+
+#apply-changes-button {
+  cursor: pointer;
+  font: message-box;
+  font-size: 14px;
+  color: white;
+  padding: 0px 5px 0px 5px;
 }
 
 /* Dropdown Button */
@@ -1973,15 +2022,52 @@ dialog :link {
   padding: 10px;
   text-decoration: none;
   color: white;
-  background: #414145; /* Original background color */
-  font-size: 14px; /* Set desired font size */
-  transition: background-color 0.2s ease, color 0.2s ease; /* Smooth transition for hover effects */
+  background: #414145;
+  font-size: 14px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+
+  position: relative;
+  padding-left: 30px;
+  line-height: 1.5;
 }
 
 /* Hover Effect for Dropdown Links */
 .drop-menu a:hover {
   background: #4B4B4F; /* Slightly lighter shade on hover instead of pure black */
   color: #ffffff; /* Maintain white text for readability */
+}
+
+.drop-menu a::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  background-repeat: no-repeat;
+  background-size: contain;
+  filter: brightness(0) invert(1);
+}
+
+#add-to-invoice-tracking-option::before {
+  background-image: url('images/solid-file-invoice-circle-play.svg');
+}
+
+#extract-data-from-documents-option::before {
+  background-image: url('images/book-sparkles-solid.svg');
+}
+
+#delete-document-option::before {
+  background-image: url('images/solid-file-circle-xmark.svg');
+}
+
+#edit-document-option::before {
+  background-image: url('images/file-pen-solid.svg');
+}
+
+#download-document-option::before {
+  background-image: url('images/file-arrow-down-solid.svg');
 }
 
 /* Positioning for Right-Side Submenus */
@@ -2035,11 +2121,6 @@ dialog :link {
 .submenu {
   z-index: 1001;
 }
-
-#apply-changes-button {
-  cursor: pointer;
-}
-
 
 /* Progress Bar */
 /* Modal Overlay */
@@ -2176,18 +2257,90 @@ dialog :link {
 }
 
 /* Document container */
+
+/* Style the label inside document-select */
+/* Use inline-flex on the label to vertically center its children */
+label.checkmark-label {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 14px !important;
+  color: white;
+  font: message-box;
+}
+
+label.checkmark-label input,
+label.checkmark-label .checkmark {
+  order: -1;
+}
+
+/* Hide the native checkbox */
+label.checkmark-label input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Create the custom checkbox using a span, with dimensions relative to font-size */
+label.checkmark-label .checkmark {
+  display: inline-block;
+  width: 24px;       /* e.g. about 20px when font-size is 16px */
+  height: 24px;
+  background-color: #eee;  /* Gray when not checked */
+  border: 2px solid #555;
+  margin-right: 0.5em;  /* Spacing between the box and the label text */
+  position: relative;
+  box-sizing: border-box;
+}
+
+/* Hover state */
+label.checkmark-label:hover input ~ .checkmark {
+  background-color: #ccc;
+}
+
+/* When checked, change the background color */
+label.checkmark-label input:checked ~ .checkmark {
+  background-color: #2196F3;
+}
+
+/* The inner checkmark indicator is hidden by default */
+label.checkmark-label .checkmark:after {
+  content: "";
+  position: absolute;
+  display: none;
+}
+
+/* Show the indicator when checked */
+label.checkmark-label input:checked ~ .checkmark:after {
+  display: block;
+}
+
+/* Style the indicator using em values so it scales with the font size */
+label.checkmark-label .checkmark:after {
+  left: 8px;     /* Adjust these values to center the indicator */
+  top: 4.5px;
+  width: 0.4em;
+  height: 0.8em;
+  border: solid white;
+  border-width: 0 0.2em 0.2em 0;
+  transform: rotate(45deg);
+  box-sizing: border-box;
+}
+
 /* Options Container */
 .document-container-options {
   display: flex;
   justify-content: flex-end;
-  gap: 15px;
+  gap: 8px;
   margin-top: 20px;
 }
 
 .document-container-options img {
-  width: 24px;
-  height: 24px;
+  width: 16px;
+  height: 16px;
   cursor: pointer;
+  padding: 4px;
+  border-radius: 2px;
 }
 
 /* Hover Effects */
@@ -2207,6 +2360,10 @@ dialog :link {
   cursor: pointer;
 }
 
+.document-container-svg-button {
+  filter: invert(1);
+}
+
 /* Document Form Container */
 .document-form-container {
   width: 100%;
@@ -2219,15 +2376,16 @@ dialog :link {
 
 .document-form-container h1 {
   width: 100%;
+  color: rgb(209, 239, 254) !important;
 }
 
 /* Styles for labels */
 .document-form-container label {
   display: block;
-  color: white;
-  font-weight: bold;
+  color: rgb(209, 239, 254);
+  font-weight: normal;
   margin-top: 10px;
-  font-size: 12px;
+  font-size: 11px;
   width: 100%;
 }
 
