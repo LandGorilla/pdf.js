@@ -79,7 +79,7 @@ class PDFThumbnailViewer {
     this.pageColors = pageColors || null;
     this.enableHWA = enableHWA || false;
     this.documentsResponse = documentsResponse;
-    this._documentStates = {};
+    this.documentStates = {};
     this._selectedThumbnail = null;
     this.sortableInstances = {};
 
@@ -148,10 +148,11 @@ class PDFThumbnailViewer {
     this._documenTypes = response.document_types;
 
     for (const doc of this.documentsData) {
-      this._documentStates[doc.id] = {
+      this.documentStates[doc.id] = {
         state: 'none',
         progress: 0,
         result: null,
+        json: null
       };
     }
 
@@ -378,12 +379,6 @@ class PDFThumbnailViewer {
       this.documentsData = args.documentsData;
 
       this.renumberDocsAndPages();
-      // this.#renderDocumentContainers();
-
-      // *** DEBUGGING *** 
-      console.log("[setDocument] documentsData before rendering:");
-      console.log(JSON.stringify(this.documentsData, null, 2));
-      // *** DEBUGGING ***
     }
 
     const firstPagePromise = pdfDocument.getPage(1);
@@ -395,11 +390,9 @@ class PDFThumbnailViewer {
 
         switch (PDFViewerApplication.viewState) {
           case ViewType.NORMAL:
-            console.log(">>> renderDocuments");
             this.#renderDocuments(firstPdfPage, viewport);
             break;
           case ViewType.GROUPED:
-            console.log(">>> renderDocumentContainers");
             this.#renderDocumentContainers();
             // this.scrollThumbnailIntoView(1);
             break;
@@ -872,7 +865,7 @@ class PDFThumbnailViewer {
     const docContainer = this.container.querySelector(`#${docId}`);
     if (!docContainer) return;
   
-    const { state, progress } = this._documentStates[docId];
+    const { state, progress } = this.documentStates[docId];
   
     const progressBar = docContainer.querySelector('.document-progress-bar');
     const progressDescription = docContainer.querySelector('.document-progress-description');
@@ -911,25 +904,26 @@ class PDFThumbnailViewer {
   }
 
   setDocumentState(docId, state) {
-    if (!this._documentStates[docId]) return;
-    this._documentStates[docId].state = state;
+    if (!this.documentStates[docId]) return;
+    this.documentStates[docId].state = state;
     this.#updateDocumentUI(docId);
   }
   
   setDocumentProgress(docId, progressValue) {
-    if (!this._documentStates[docId]) return;
-    this._documentStates[docId].progress = progressValue;
+    if (!this.documentStates[docId]) return;
+    this.documentStates[docId].progress = progressValue;
     this.#updateDocumentUI(docId);
   }
 
-  setDocumentResult(docId, result) {
-    this._documentStates[docId].result = result;
+  setDocumentResult(docId, jsonResult, htmlContent) {
+    this.documentStates[docId].result = htmlContent;
+    this.documentStates[docId].json = jsonResult;
   }
 
   #displayDocumentForm(docId) {
-    if (!this._documentStates[docId]) return;
-    const result = this._documentStates[docId].result;
-    const rightPanelContent = document.getElementById('rightSidebarContent')
+    if (!this.documentStates[docId]) return;
+    const result = this.documentStates[docId].result;
+    const rightPanelContent = document.getElementById('rightSidebarContent');
     if (result) {
       rightPanelContent.innerHTML = result;
     } else {
@@ -1284,8 +1278,6 @@ class PDFThumbnailViewer {
   }
 
   renumberDocsAndPages() {
-    // If you prefer doc-local page numbering, reset to 1 inside each doc loop.
-    // If you prefer *global* numbering across all docs, use a single counter outside.
     let globalPageNumber = 1;
   
     // Loop over each doc in documentsData
@@ -1302,7 +1294,6 @@ class PDFThumbnailViewer {
       }
   
       // Now loop over the pages in this doc
-      // (If you prefer doc-local numbering, set let pageNumber = 1; before the loop)
       for (let pageIndex = 0; pageIndex < doc.pages.length; pageIndex++) {
         const page = doc.pages[pageIndex];
         const oldPageId = page.id;
@@ -1310,7 +1301,6 @@ class PDFThumbnailViewer {
   
         // Update the page's ID
         page.id = newPageId;
-        // page.rotation = 0;
   
         // Update pageNumber to either doc-local or global numbering:
         // For doc-local:  page.pageNumber = pageIndex + 1;
@@ -1324,7 +1314,6 @@ class PDFThumbnailViewer {
           this._thumbnails[thumbIndex].id = newPageId;
           this._thumbnails[thumbIndex].div.id = newPageId;
   
-          // If you have a setPageLabel() method, update the thumbnail label:
           const label = page.pageNumber.toString();
           this._thumbnails[thumbIndex].setPageLabel(label);
         }

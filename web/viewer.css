@@ -2459,3 +2459,43 @@ label.checkmark-label .checkmark:after {
   margin-top: 5px;
   font: message-box;
 }
+
+/* Popup for generic error */
+.popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5); /* semi-transparent overlay */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.popup-content {
+  background-color: rgb(12 12 13);
+  padding: 20px;
+  border-radius: 8px;
+  text-align: center;
+  color: white;
+  min-width: 400px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.5);
+  font: message-box;
+}
+
+.popup-content button {
+  margin-top: 15px;
+  background-color: rgb(56 56 61);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.popup-content button:hover {
+  background-color: #555;
+}

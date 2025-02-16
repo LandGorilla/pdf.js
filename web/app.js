@@ -112,7 +112,7 @@ const EditorState = Object.freeze({
   EDIT: 'EDIT',
 });
 
-const API_URL = 'http://localhost:8083'; //'https://research.landgorilla.dev';
+const API_URL = 'https://research.landgorilla.dev'; //'http://localhost:8083';
 
 const PDFViewerApplication = {
   initialBookmark: document.location.hash.substring(1),
@@ -1199,7 +1199,6 @@ const PDFViewerApplication = {
         document.getElementById("classify-documents-button").style.display = "none";
         document.getElementById("extract-data-from-documents").style.display = "flex";
         document.getElementById("edit-pdf").style.display = "flex";
-        document.getElementById("add-container-button").style.display = "flex";
         document.getElementById("select-all-container").style.display = "flex";
         document.getElementById("open-sidebar-options").style.display = "flex";
         sidebarLeftAction.style.justifyContent = 'space-between';
@@ -1208,10 +1207,12 @@ const PDFViewerApplication = {
           case EditorState.VIEW:
             document.getElementById("apply-changes-button").style.display = "none";
             document.getElementById("edit-pdf").style.display = "flex";
+            document.getElementById("add-container-button").style.display = "none";
             break;
           case EditorState.EDIT:
             document.getElementById("apply-changes-button").style.display = "flex";
             document.getElementById("edit-pdf").style.display = "none";
+            document.getElementById("add-container-button").style.display = "flex";
             break;
         }
 
@@ -1316,7 +1317,13 @@ const PDFViewerApplication = {
   },
 
   async extractDataForSelectedDocuments() {
-    const docIds = this.pdfThumbnailViewer?.getSelectedDocumentContainerIds();
+    const docIds = this.pdfThumbnailViewer?.getSelectedDocumentContainerIds() || [];
+    
+    if (docIds.length === 0) {
+      this.showGenericMessage("No document was selected");
+      return;
+    }
+    
     if (docIds.length > 0) {
       await this.extractDataFromDocuments(docIds);
     }
@@ -1419,11 +1426,13 @@ const PDFViewerApplication = {
       }
   
       // Parse the result from server
-      const result = await response.text();
+      const jsonResponse = await response.json();
+      const htmlContent = jsonResponse["html"];
+      const result = jsonResponse["result"];
   
       // Update progress to ~90% if needed
       this.pdfThumbnailViewer?.setDocumentProgress(docId, 90);
-      this.pdfThumbnailViewer?.setDocumentResult(docId, result);
+      this.pdfThumbnailViewer?.setDocumentResult(docId, result, htmlContent);
   
       // Now accelerate to 100%
       control.accelerate = true;
@@ -1446,7 +1455,13 @@ const PDFViewerApplication = {
   },
 
   async deleteSelectedDocuments() {
-    const docIds = this.pdfThumbnailViewer?.getSelectedDocumentContainerIds();
+    const docIds = this.pdfThumbnailViewer?.getSelectedDocumentContainerIds() || [];
+    
+    if (docIds.length === 0) {
+      this.showGenericMessage("No document was selected");
+      return;
+    }
+
     for (const docId of docIds) {
       this.pdfThumbnailViewer?.removeDocumentContainer(docId, false);
     }
@@ -1467,7 +1482,13 @@ const PDFViewerApplication = {
   },
 
   async downloadSelectedDocuments() {
-    const docIds = this.pdfThumbnailViewer?.getSelectedDocumentContainerIds();
+    const docIds = this.pdfThumbnailViewer?.getSelectedDocumentContainerIds() || [];
+    
+    if (docIds.length === 0) {
+      this.showGenericMessage("No document was selected");
+      return;
+    }
+
     const pdfFiles = await Promise.all(
       docIds.map(async (docId) => {
         // Get your document data and pages, then extract the PDF Blob.
@@ -1511,6 +1532,64 @@ const PDFViewerApplication = {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
+  },
+
+  addToInvoiceTracking() {
+    const selectedDocIds = this.pdfThumbnailViewer?.getSelectedDocumentContainerIds() || [];
+    
+    if (selectedDocIds.length === 0) {
+      this.showGenericMessage("No document was selected");
+      return;
+    }
+    
+    // Validate that at least one selected document is of type 'Invoice'
+    const selectedInvoiceDocIds = selectedDocIds.filter(docId => {
+      // Assume each document container has a combo box with id="doc-type-{docId}"
+      const docTypeElement = document.getElementById(`doc-type-${docId}`);
+      return docTypeElement && docTypeElement.value === 'Invoice';
+    });
+    
+    if (selectedInvoiceDocIds.length === 0) {
+      this.showGenericMessage("You have not selected any Invoice documents");
+      return;
+    }
+    
+    // Retrieve the document states from the thumbnail viewer.
+    const documentStates = this.pdfThumbnailViewer?.documentStates;
+    if (!documentStates) {
+      console.error("documentStates is not available.");
+      return;
+    }
+    
+    // Check if any selected document has missing or null JSON content.
+    // Using == null catches both null and undefined.
+    const hasMissingOrNullJson = selectedDocIds.some(docId => {
+      const jsonContent = documentStates[docId]?.json;
+      return jsonContent == null;
+    });
+    
+    if (hasMissingOrNullJson) {
+      this.showGenericMessage("Some documents do not have the extracted data available");
+      return;
+    }
+    
+    // Create a JSON array only for the Invoice documents.
+    const jsonsArray = selectedInvoiceDocIds.map(docId => documentStates[docId].json);
+    const jsonString = JSON.stringify(jsonsArray, null, 2);
+    
+    // Create a Blob from the JSON string and trigger a download.
+    const blob = new Blob([jsonString], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "result.json";
+    document.body.appendChild(a); // Append to the DOM (required by some browsers)
+    a.click();
+    document.body.removeChild(a);
+    
+    // Optionally revoke the object URL.
+    URL.revokeObjectURL(url);
   },
 
   getCurrentDocumentsAndPages() {
@@ -1730,7 +1809,6 @@ const PDFViewerApplication = {
     // 1) Load the original PDF
     const originalPdfBytes = await this.pdfDocument.getData();
     const originalPdf = await PDFDocument.load(originalPdfBytes);
-    
     const newPdf = await PDFDocument.create();
   
     // 2) Copy pages in the specified order
@@ -1746,16 +1824,12 @@ const PDFViewerApplication = {
     }
   
     copiedPages.forEach((pdfPage, i) => {
-      // zeroBased[i] is the original zero-based index
-      const pageNum = zeroBased[i] + 1; // convert back to 1-based
+      const pageNum = zeroBased[i] + 1;
       const rotateVal = pageRotationMap[pageNum] || 0;
-  
-      if (rotateVal) {
-        const angle = degrees(rotateVal);
-        console.log("generatePDF rotateVal: " + rotateVal);
-        console.log("generatePDF angle: " + angle);
-        pdfPage.setRotation(angle); 
-      }
+      const angle = degrees(rotateVal);
+      console.log("generatePDF rotateVal: " + rotateVal);
+      console.log("generatePDF angle: " + angle);
+      pdfPage.setRotation(angle);
   
       newPdf.addPage(pdfPage);
     });
@@ -2632,6 +2706,7 @@ const PDFViewerApplication = {
     document.getElementById("extract-data-from-documents-option").addEventListener("click", this.extractDataForSelectedDocuments.bind(this));
     document.getElementById("delete-document-option").addEventListener("click", this.deleteSelectedDocuments.bind(this));
     document.getElementById("download-document-option").addEventListener("click", this.downloadSelectedDocuments.bind(this));
+    document.getElementById("add-to-invoice-tracking-option").addEventListener("click", this.addToInvoiceTracking.bind(this));
 
     this.bindDropdownEvents();
   },
@@ -2955,6 +3030,24 @@ const PDFViewerApplication = {
     this.showLoading();
 
     // Call endpoint to classify documents
+  },
+
+  showGenericMessage(message, buttonText = "Close") {
+    const popup = document.getElementById("generic-popup");
+    const messageElement = document.getElementById("popup-message");
+    const closeButton = document.getElementById("popup-close");
+  
+    // Set the message and the button text.
+    messageElement.textContent = message;
+    closeButton.textContent = buttonText;
+  
+    // Display the popup.
+    popup.style.display = "flex";
+  
+    // Set up the close button to hide the popup.
+    closeButton.onclick = function () {
+      popup.style.display = "none";
+    };
   }
 };
 
@@ -3315,7 +3408,6 @@ function onRotationChanging(evt) {
 }
 
 function onPageChanging({ pageNumber, pageLabel }) {
-  console.log("onPageChanging");
   this.toolbar?.setPageNumber(pageNumber, pageLabel);
   this.secondaryToolbar?.setPageNumber(pageNumber);
 
