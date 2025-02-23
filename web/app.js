@@ -112,7 +112,7 @@ const EditorState = Object.freeze({
   EDIT: 'EDIT',
 });
 
-const API_URL = 'https://research.landgorilla.dev'; //'http://localhost:8083';
+const API_URL = 'https://research.landgorilla.dev'; // 'http://localhost:8083';
 
 const PDFViewerApplication = {
   initialBookmark: document.location.hash.substring(1),
@@ -1190,9 +1190,9 @@ const PDFViewerApplication = {
         document.getElementById("extract-data-from-documents").style.display = "none";
         document.getElementById("edit-pdf").style.display = "none";
         document.getElementById("add-container-button").style.display = "none";
-        document.getElementById("apply-changes-button").style.display = "none";
         document.getElementById("select-all-container").style.display = "none";
         document.getElementById("open-sidebar-options").style.display = "none";
+        document.getElementById("edit-mode-container").style.display = "none";
         sidebarLeftAction.style.justifyContent = "flex-end";
         break;
       case ViewType.GROUPED:
@@ -1203,25 +1203,29 @@ const PDFViewerApplication = {
         document.getElementById("open-sidebar-options").style.display = "flex";
         sidebarLeftAction.style.justifyContent = 'space-between';
 
+        var editModeHeight = 0;
         switch (this.editorState) {
           case EditorState.VIEW:
-            document.getElementById("apply-changes-button").style.display = "none";
             document.getElementById("edit-pdf").style.display = "flex";
             document.getElementById("add-container-button").style.display = "none";
+            document.getElementById("edit-mode-container").style.display = "none";
             break;
           case EditorState.EDIT:
-            document.getElementById("apply-changes-button").style.display = "flex";
             document.getElementById("edit-pdf").style.display = "none";
             document.getElementById("add-container-button").style.display = "flex";
+            document.getElementById("edit-mode-container").style.display = "flex";
+            editModeHeight = 100;
             break;
         }
+
+        document.documentElement.style.setProperty('--editModeContainer-height', `${editModeHeight}px`);
 
         break;
     }
 
     this.pdfThumbnailViewer?.enableDragAndDrop(this.editorState == EditorState.EDIT);
     this.pdfThumbnailViewer?.updateThumbnailButtonsVisibility(this.editorState == EditorState.EDIT);
-    this.pdfThumbnailViewer?.toggleDeleteIcons(this.editorState == EditorState.EDIT);
+    this.pdfThumbnailViewer?.toggleEditableIcons(this.editorState == EditorState.EDIT);
   },
 
   async searchDocumentsInFile() {
@@ -1316,6 +1320,10 @@ const PDFViewerApplication = {
     return pdfBlob;
   },
 
+  async extractDataForAllDocuments() {
+    await this.extractDataFromDocuments();
+  },
+
   async extractDataForSelectedDocuments() {
     const docIds = this.pdfThumbnailViewer?.getSelectedDocumentContainerIds() || [];
     
@@ -1330,7 +1338,7 @@ const PDFViewerApplication = {
   },
 
   async extractDataFromDocuments(docIds) {
-    const allDocs = this.getCurrentDocumentsAndPages();
+    const allDocs = this.getCurrentDocumentsAndPages() || [];
     let docsToProcess = allDocs;
     if (docIds) {
       docsToProcess = allDocs.filter(docData => docIds.includes(docData.docId));
@@ -1690,6 +1698,17 @@ const PDFViewerApplication = {
   editPDF() {
     this.editorState = EditorState.EDIT;
     this.refreshOptions();
+  },
+
+  async undoChanges() {
+    const originalPdfBytes = await this.pdfDocument.getData();
+    const blob = new Blob([originalPdfBytes], { type: 'application/pdf' });
+    const pdfUrl = URL.createObjectURL(blob);
+
+    this.editorState = EditorState.VIEW;
+    this.refreshOptions();
+
+    PDFViewerApplication.open({ url: pdfUrl, documentsData: this.pdfThumbnailViewer.previousDocumentsData });
   },
 
   async applyChanges() {
@@ -2700,9 +2719,10 @@ const PDFViewerApplication = {
 
     document.getElementById("classify-documents-button").addEventListener("click", this.searchDocumentsInFile.bind(this));
     document.getElementById("add-container-button").addEventListener("click", this.createDocumentContainer.bind(this));
-    document.getElementById("extract-data-from-documents").addEventListener("click", this.extractDataFromDocuments.bind(this));
+    document.getElementById("extract-data-from-documents").addEventListener("click", this.extractDataForAllDocuments.bind(this));
     document.getElementById("edit-pdf").addEventListener("click", this.editPDF.bind(this));
-    document.getElementById("apply-changes-button").addEventListener("click", this.applyChanges.bind(this));
+    document.getElementById("edit-mode-cancel").addEventListener("click", this.undoChanges.bind(this));
+    document.getElementById("edit-mode-save").addEventListener("click", this.applyChanges.bind(this));
     document.getElementById("extract-data-from-documents-option").addEventListener("click", this.extractDataForSelectedDocuments.bind(this));
     document.getElementById("delete-document-option").addEventListener("click", this.deleteSelectedDocuments.bind(this));
     document.getElementById("download-document-option").addEventListener("click", this.downloadSelectedDocuments.bind(this));

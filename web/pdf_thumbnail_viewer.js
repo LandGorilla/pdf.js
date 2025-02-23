@@ -145,6 +145,7 @@ class PDFThumbnailViewer {
     this.#resetView();
     
     this.documentsData = await this.initializeDocuments(response.result);
+    this.previousDocumentsData = structuredClone(this.documentsData);
     this._documenTypes = response.document_types;
 
     for (const doc of this.documentsData) {
@@ -375,9 +376,10 @@ class PDFThumbnailViewer {
       await this.setDocumentsData(documentsResponse);
     }
 
-    if (args.documentsData && args.flatPages) {
+    // Apply changes
+    if (args.documentsData) {
       this.documentsData = args.documentsData;
-
+      this.previousDocumentsData = structuredClone(args.documentsData);
       this.renumberDocsAndPages();
     }
 
@@ -601,6 +603,22 @@ class PDFThumbnailViewer {
       const optionsContainer = document.createElement('div');
       optionsContainer.classList.add('document-container-options');
 
+      // Create Add Container
+      const addDocumentIcon = document.createElement('img');
+      addDocumentIcon.src = 'images/folder-plus.svg';
+      addDocumentIcon.alt = 'Add Document Container';
+      addDocumentIcon.title = 'Add Document Container';
+      addDocumentIcon.style.display = 'none';
+      addDocumentIcon.classList.add('icon-add-document');
+      addDocumentIcon.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const currentContainer = event.target.closest('.document-container');
+        const containers = Array.from(this.container.children);
+        const index = containers.indexOf(currentContainer);
+        this.addNewEmptyDocumentContainer(index + 1, false);
+      });
+      optionsContainer.appendChild(addDocumentIcon);
+
       // Create and append new "Extract" div
       const extractIcon = document.createElement('img');
       extractIcon.src = 'images/book-sparkles-solid.svg';
@@ -769,12 +787,19 @@ class PDFThumbnailViewer {
     });
   }
 
-  toggleDeleteIcons(show) {
+  toggleEditableIcons(show) {
     const docContainers = document.querySelectorAll('.document-container');
     docContainers.forEach((container) => {
       const deleteIcon = container.querySelector('.icon-delete');
       if (deleteIcon) {
         deleteIcon.style.display = show ? 'flex' : 'none';
+      }
+    });
+
+    docContainers.forEach((container) => {
+      const addDocumentIcon = container.querySelector('.icon-add-document');
+      if (addDocumentIcon) {
+        addDocumentIcon.style.display = show ? 'flex' : 'none';
       }
     });
   }
@@ -946,17 +971,17 @@ class PDFThumbnailViewer {
   }
 
   // Function to add a new empty document container at the beginning
-  addNewEmptyDocumentContainer() {
+  addNewEmptyDocumentContainer(index=0, autoScroll=true) {
     // Create a new empty document object.
     const newDoc = {
       id: this.#generateUniqueId(),
-      document: '',        // Empty file name
-      document_type: '',   // No document type selected
-      pages: []            // No pages yet
+      document: '',
+      document_type: '',
+      pages: []
     };
   
     // Insert the new document at the beginning of the documentsData array.
-    this.documentsData.unshift(newDoc);
+    this.documentsData.splice(index, 0, newDoc);
   
     // Create the main document container.
     const docContainer = document.createElement('div');
@@ -1031,6 +1056,21 @@ class PDFThumbnailViewer {
     // --- Options Container (Extract, Delete, Download) ---
     const optionsContainer = document.createElement('div');
     optionsContainer.classList.add('document-container-options');
+
+    // Create Add Container
+    const addDocumentIcon = document.createElement('img');
+    addDocumentIcon.src = 'images/folder-plus.svg';
+    addDocumentIcon.alt = 'Add Document Container';
+    addDocumentIcon.title = 'Add Document Container';
+    addDocumentIcon.classList.add('icon-add-document');
+    addDocumentIcon.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const currentContainer = event.target.closest('.document-container');
+      const containers = Array.from(this.container.children);
+      const index = containers.indexOf(currentContainer);
+      this.addNewEmptyDocumentContainer(index + 1, false);
+    });
+    optionsContainer.appendChild(addDocumentIcon);
   
     // Extract button.
     const extractIcon = document.createElement('img');
@@ -1127,7 +1167,10 @@ class PDFThumbnailViewer {
     docContainer.appendChild(statusContainer);
   
     // --- Append the Document Container ---
-    this.container.insertBefore(docContainer, this.container.firstChild);
+    this.container.insertBefore(
+      docContainer,
+      this.container.children[index] || null
+    );
   
     // --- Enable Drag & Drop on the Thumbnails Container ---
     const sortableInstance = Sortable.create(thumbnailsContainer, {
@@ -1141,8 +1184,10 @@ class PDFThumbnailViewer {
     });
     this.sortableInstances[newDoc.id] = sortableInstance;
   
-    // Scroll the new document container into view.
-    scrollIntoView(docContainer, { top: THUMBNAIL_SCROLL_MARGIN });
+    if (autoScroll) {
+      // Scroll the new document container into view.
+      scrollIntoView(docContainer, { top: THUMBNAIL_SCROLL_MARGIN });
+    }
   }
 
   _onSelectThumbnail(evt) {

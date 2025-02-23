@@ -27,6 +27,7 @@
   --sidebar-transition-timing-function: ease;
 
   --toolbar-height: 32px;
+  --editModeContainer-height:0px;
   --toolbar-horizontal-padding: 1px;
   --toolbar-vertical-padding: 2px;
   --icon-size: 16px;
@@ -344,7 +345,7 @@ body {
 }
 
 #sidebarContent {
-  inset-block: var(--toolbar-height) 0;
+  inset-block: calc(var(--toolbar-height) + var(--editModeContainer-height)) 0;
   inset-inline-start: 0;
   /* overflow: auto; */
   position: absolute;
@@ -355,7 +356,10 @@ body {
 #viewerContainer {
   overflow: auto;
   position: absolute;
-  inset: var(--toolbar-height) 0 0;
+  top: calc(var(--toolbar-height) + var(--editModeContainer-height));
+  right: 0;
+  bottom: 0;
+  left: auto;
   outline: none;
   z-index: 0;
 }
@@ -1830,12 +1834,6 @@ dialog :link {
   cursor: pointer;
 }
 
-/* .action-button img {
-  width: 100%; 
-  height: 100%;
-  object-fit: contain;
-} */
-
 .action-button:hover {
   background: rgba(0, 0, 0, 0.72);
 }
@@ -1872,6 +1870,54 @@ dialog :link {
 
 #editorModeButtons {
   display: none;
+}
+
+#edit-mode-container {
+  width: 100%;
+  height: 100px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  box-sizing: border-box;
+  gap: 5px;
+  font: message-box;
+  border-bottom: 1px solid black;
+  display: none;
+}
+
+#edit-mode-container .text {
+  font-size: 14px;
+  color: white;
+}
+
+#edit-mode-container .buttons {
+  display: flex;
+  gap: 10px;
+}
+
+#edit-mode-container .buttons button {
+  font-size: 18px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  width: 150px;
+  border: none;
+  outline: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+}
+
+#edit-mode-container .buttons button:active {
+  filter: brightness(1.2);
+}
+
+#edit-mode-container .buttons #edit-mode-cancel {
+  background-color: rgb(96, 96, 96);
+}
+
+#edit-mode-container .buttons #edit-mode-save {
+  background-color: rgb(111, 155, 56);
 }
 
 /* Styles for the form container */
@@ -1975,14 +2021,6 @@ dialog :link {
   width: 16px;
   height: 16px;
   filter: saturate(0) !important;
-}
-
-#apply-changes-button {
-  cursor: pointer;
-  font: message-box;
-  font-size: 14px;
-  color: white;
-  padding: 0px 5px 0px 5px;
 }
 
 /* Dropdown Button */
@@ -2166,7 +2204,7 @@ dialog :link {
 /* Progress Bar */
 .progress-bar {
   height: 100%;
-  background-color: #0077cc;
+  background-color: rgb(160, 209, 98);
   width: 0%;
   animation: loadProgress 3s forwards;
 }
@@ -2193,7 +2231,7 @@ dialog :link {
 /* Position and style the right sidebar container */
 #rightSidebarContainer {
   position: absolute;
-  top: 0;
+  top: calc(var(--toolbar-height) + var(--editModeContainer-height));
   bottom: 0;
   right: 0;
   /* background-color: blue; */
@@ -2215,7 +2253,7 @@ dialog :link {
   inset-block: var(--toolbar-height) 0;
   width: 100%;
   box-shadow: inset 1px 0 0 rgb(0 0 0 / 0.25);
-  padding: 40px;
+  padding: 0px 40px 40px 40px;
 }
 
 #rightSidebarContent, 
@@ -2300,7 +2338,7 @@ label.checkmark-label:hover input ~ .checkmark {
 
 /* When checked, change the background color */
 label.checkmark-label input:checked ~ .checkmark {
-  background-color: #2196F3;
+  background-color: rgb(111, 155, 56); /*#2196F3;*/
 }
 
 /* The inner checkmark indicator is hidden by default */
@@ -2429,7 +2467,7 @@ label.checkmark-label .checkmark:after {
 }
 
 .document-progress-bar::-webkit-progress-value {
-  background-color: #fff;
+  background-color: rgb(160, 209, 98);
   border-radius: 5px;
 }
 
