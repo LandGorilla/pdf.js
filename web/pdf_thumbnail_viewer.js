@@ -99,6 +99,11 @@ class PDFThumbnailViewer {
     mainCheckbox.addEventListener('change', (event) => {
       this.toggleAllCheckboxes(event.target.checked);
     });
+
+    const invoicesCheckbox = document.querySelector('#select-invoices-container input[type="checkbox"]');
+    invoicesCheckbox.addEventListener('change', (event) => {
+      this.toggleInvoicesCheckboxes(event.target.checked);
+    });
   }
 
   async initializeDocuments(documents) {
@@ -149,15 +154,19 @@ class PDFThumbnailViewer {
     this._documenTypes = response.document_types;
 
     for (const doc of this.documentsData) {
-      this.documentStates[doc.id] = {
-        state: 'none',
-        progress: 0,
-        result: null,
-        json: null
-      };
+      this.setupState(doc.id);
     }
 
     this.#renderDocumentContainers();
+  }
+
+  setupState(docId) {
+    this.documentStates[docId] = {
+      state: 'none',
+      progress: 0,
+      result: null,
+      json: null
+    };
   }
 
   #scrollUpdated() {
@@ -396,7 +405,6 @@ class PDFThumbnailViewer {
             break;
           case ViewType.GROUPED:
             this.#renderDocumentContainers();
-            // this.scrollThumbnailIntoView(1);
             break;
         }
       })
@@ -756,6 +764,17 @@ class PDFThumbnailViewer {
     const thumbnailView = this._thumbnails[this._currentPageNumber - 1];
     thumbnailView.div.classList.add(THUMBNAIL_SELECTED_CLASS);
 
+    // Also add the CONTAINER_SELECTED_CLASS to the current document's thumbnails container
+    const docContainer = thumbnailView.div.closest('.document-container');
+    if (docContainer) {
+      const thumbnailContainer = docContainer.querySelector('.thumbnails-container');
+      if (thumbnailContainer) {
+        thumbnailContainer.classList.add(CONTAINER_SELECTED_CLASS);
+        this._currentThumbnailContainer = thumbnailContainer;
+        this._currentDocumentContainer = docContainer;
+      }
+    }
+
     Promise.all(promises).then(() => {
       this.renderingQueue.renderHighestPriority();
       this.eventBus.dispatch('thumbnailsready', { source: this });
@@ -784,6 +803,19 @@ class PDFThumbnailViewer {
     const checkboxes = document.querySelectorAll('.document-container input[type="checkbox"]');
     checkboxes.forEach(checkbox => {
       checkbox.checked = selectAll;
+    });
+  }
+
+  toggleInvoicesCheckboxes(selectAll) {
+    const docContainers = document.querySelectorAll('.document-container');
+    docContainers.forEach((container) => {
+      const docTypeSelect = container.querySelector('select[id^="doc-type-"]');
+      if (docTypeSelect && docTypeSelect.value === 'Invoice') {
+        const checkbox = container.querySelector('input[type="checkbox"]');
+        if (checkbox) {
+          checkbox.checked = selectAll;
+        }
+      }
     });
   }
 
@@ -979,6 +1011,8 @@ class PDFThumbnailViewer {
       document_type: '',
       pages: []
     };
+
+    this.setupState(newDoc.id);
   
     // Insert the new document at the beginning of the documentsData array.
     this.documentsData.splice(index, 0, newDoc);
@@ -1079,7 +1113,7 @@ class PDFThumbnailViewer {
     extractIcon.title = 'Extract data';
     extractIcon.classList.add('document-container-svg-button');
     extractIcon.addEventListener('click', (event) => {
-      const docId = doc.id;
+      const docId = newDoc.id;
       const documentData = this.documentsData.find((d) => d.id === docId);
       const pageNumbers = documentData.pages.map((page) => page.pageNumber);
       this.eventBus.dispatch('document-container-extract', { source: this, docId, pageNumbers });

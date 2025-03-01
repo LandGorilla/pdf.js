@@ -112,7 +112,7 @@ const EditorState = Object.freeze({
   EDIT: 'EDIT',
 });
 
-const API_URL = 'https://research.landgorilla.dev'; // 'http://localhost:8083';
+const API_URL = 'http://localhost:8083'; //'https://research.landgorilla.dev'
 
 const PDFViewerApplication = {
   initialBookmark: document.location.hash.substring(1),
@@ -1190,7 +1190,7 @@ const PDFViewerApplication = {
         document.getElementById("extract-data-from-documents").style.display = "none";
         document.getElementById("edit-pdf").style.display = "none";
         document.getElementById("add-container-button").style.display = "none";
-        document.getElementById("select-all-container").style.display = "none";
+        document.getElementById("select-checkboxes-container").style.display = "none";
         document.getElementById("open-sidebar-options").style.display = "none";
         document.getElementById("edit-mode-container").style.display = "none";
         sidebarLeftAction.style.justifyContent = "flex-end";
@@ -1199,7 +1199,7 @@ const PDFViewerApplication = {
         document.getElementById("classify-documents-button").style.display = "none";
         document.getElementById("extract-data-from-documents").style.display = "flex";
         document.getElementById("edit-pdf").style.display = "flex";
-        document.getElementById("select-all-container").style.display = "flex";
+        document.getElementById("select-checkboxes-container").style.display = "flex";
         document.getElementById("open-sidebar-options").style.display = "flex";
         sidebarLeftAction.style.justifyContent = 'space-between';
 
@@ -1583,7 +1583,28 @@ const PDFViewerApplication = {
     
     // Create a JSON array only for the Invoice documents.
     const jsonsArray = selectedInvoiceDocIds.map(docId => documentStates[docId].json);
-    const jsonString = JSON.stringify(jsonsArray, null, 2);
+
+    // Generate a UUID; if the browser supports crypto.randomUUID use that, otherwise provide a fallback.
+    let requestId;
+    if (crypto && crypto.randomUUID) {
+      requestId = crypto.randomUUID();
+    } else {
+      // Fallback: simple UUID generator
+      requestId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+
+    // Build the final object with the required format.
+    const resultObject = {
+      request_id: requestId,
+      datetime: new Date().toISOString(),
+      number_of_invoices: jsonsArray.length,
+      data: jsonsArray
+    };
+
+    const jsonString = JSON.stringify(resultObject, null, 2);
     
     // Create a Blob from the JSON string and trigger a download.
     const blob = new Blob([jsonString], { type: "application/json" });
@@ -1846,8 +1867,6 @@ const PDFViewerApplication = {
       const pageNum = zeroBased[i] + 1;
       const rotateVal = pageRotationMap[pageNum] || 0;
       const angle = degrees(rotateVal);
-      console.log("generatePDF rotateVal: " + rotateVal);
-      console.log("generatePDF angle: " + angle);
       pdfPage.setRotation(angle);
   
       newPdf.addPage(pdfPage);

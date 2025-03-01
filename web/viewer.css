@@ -73,7 +73,7 @@
   --treeitem-selected-color: rgb(0 0 0 / 0.9);
   --treeitem-selected-bg-color: rgb(0 0 0 / 0.25);
   --thumbnail-hover-color: rgb(0 0 0 / 0.1);
-  --thumbnail-selected-color: rgb(209, 239, 254);
+  --thumbnail-selected-color: rgb(160, 209, 98);
   --doorhanger-bg-color: rgb(255 255 255);
   --doorhanger-border-color: rgb(12 12 13 / 0.2);
   --doorhanger-hover-color: rgb(12 12 13);
@@ -187,7 +187,7 @@
     --treeitem-selected-color: rgb(255 255 255 / 0.9);
     --treeitem-selected-bg-color: rgb(255 255 255 / 0.25);
     --thumbnail-hover-color: rgb(255 255 255 / 0.1);
-    --thumbnail-selected-color: rgb(209, 239, 254);
+    --thumbnail-selected-color: rgb(160, 209, 98);
     --doorhanger-bg-color: rgb(74 74 79);
     --doorhanger-border-color: rgb(39 39 43);
     --doorhanger-hover-color: rgb(249 249 250);
@@ -777,7 +777,7 @@ body {
   height: var(--thumbnail-height);
   margin: 5px 5px;
   padding: 1px;
-  border: 5px solid transparent;
+  border: 4px solid transparent;
   border-radius: 2px;
 }
 
@@ -1803,7 +1803,7 @@ dialog :link {
   flex-wrap: wrap;
   height: auto;
   overflow: visible;
-  border: 1px dashed #6F6F73;
+  border: 1px solid #6F6F73;
   border-radius: 10px;
   margin-top: 5px;
   min-height: 150px;
@@ -1811,7 +1811,7 @@ dialog :link {
 }
 
 .thumbnails-container.selected {
-  border: 2px dashed var(--thumbnail-selected-color) !important;
+  border: 2px solid var(--thumbnail-selected-color) !important;
 }
 
 .thumbnail .actions {
@@ -1991,8 +1991,21 @@ dialog :link {
   height: 24px;
 }
 
+#select-checkboxes-container {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+}
+
 #select-all-container {
   margin-left: 30px;
+  align-items: center;
+}
+
+#select-invoices-container {
+  margin-left: 30px;
+  align-items: center;
+  margin-top: 2px;
 }
 
 .customToolbarButton {
