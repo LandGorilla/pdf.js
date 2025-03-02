@@ -112,7 +112,7 @@ const EditorState = Object.freeze({
   EDIT: 'EDIT',
 });
 
-const API_URL = 'http://localhost:8083'; //'https://research.landgorilla.dev'
+const API_URL = 'http://localhost:8083'; // 'https://research.landgorilla.dev';
 
 const PDFViewerApplication = {
   initialBookmark: document.location.hash.substring(1),

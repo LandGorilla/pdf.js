@@ -283,6 +283,8 @@ class PDFThumbnailViewer {
     thumbnailContainer.classList.add(CONTAINER_SELECTED_CLASS);
     this._currentThumbnailContainer = thumbnailContainer;
     this._currentDocumentContainer = docContainer;
+
+    this.#displayDocumentForm(docContainer.id);
   
     // Build an array of "views" representing all document containers.
     // Each view object must have a `div` property and an `id`.
@@ -773,6 +775,8 @@ class PDFThumbnailViewer {
         this._currentThumbnailContainer = thumbnailContainer;
         this._currentDocumentContainer = docContainer;
       }
+
+      this.#displayDocumentForm(docContainer.id);
     }
 
     Promise.all(promises).then(() => {
