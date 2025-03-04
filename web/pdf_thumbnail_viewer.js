@@ -32,7 +32,7 @@ import {
   watchScroll,
 } from "./ui_utils.js";
 import { PDFThumbnailView, TempImageFactory } from "./pdf_thumbnail_view.js";
-import { PDFViewerApplication, ViewType } from "./app.js";
+import { PDFViewerApplication, ViewType, EditorState } from "./app.js";
 
 const THUMBNAIL_SCROLL_MARGIN = -19;
 const THUMBNAIL_SELECTED_CLASS = "selected";
@@ -609,6 +609,22 @@ class PDFThumbnailViewer {
       // Append the form container to the document container
       docContainer.appendChild(formContainer);
 
+      fileNameInput.addEventListener('input', (event) => {
+        const newName = event.target.value;
+        const document = this.documentsData.find(document => document.id === doc.id);
+        if (document) {
+          document.document = newName;
+        }
+      });
+      
+      docTypeSelect.addEventListener('change', (event) => {
+        const newType = event.target.value;
+        const document = this.documentsData.find(document => document.id === doc.id);
+        if (document) {
+          document.document_type = newType;
+        }
+      });
+
       // Create a horizontal list of options (delete, download)
       const optionsContainer = document.createElement('div');
       optionsContainer.classList.add('document-container-options');
@@ -779,6 +795,8 @@ class PDFThumbnailViewer {
       this.#displayDocumentForm(docContainer.id);
     }
 
+    this.allowEdition(PDFViewerApplication.editorState == EditorState.EDIT);
+
     Promise.all(promises).then(() => {
       this.renderingQueue.renderHighestPriority();
       this.eventBus.dispatch('thumbnailsready', { source: this });
@@ -823,19 +841,30 @@ class PDFThumbnailViewer {
     });
   }
 
-  toggleEditableIcons(show) {
+  allowEdition(show) {
     const docContainers = document.querySelectorAll('.document-container');
     docContainers.forEach((container) => {
+      // Set delete icon display
       const deleteIcon = container.querySelector('.icon-delete');
       if (deleteIcon) {
         deleteIcon.style.display = show ? 'flex' : 'none';
       }
-    });
-
-    docContainers.forEach((container) => {
+      // Set add document icon display
       const addDocumentIcon = container.querySelector('.icon-add-document');
       if (addDocumentIcon) {
         addDocumentIcon.style.display = show ? 'flex' : 'none';
+      }
+      
+      // Enable/disable text input (document name)
+      const textInput = container.querySelector('input[type="text"]');
+      if (textInput) {
+        textInput.disabled = !show;
+      }
+      
+      // Enable/disable dropdown (document type)
+      const dropdown = container.querySelector('select');
+      if (dropdown) {
+        dropdown.disabled = !show;
       }
     });
   }
@@ -1090,6 +1119,22 @@ class PDFThumbnailViewer {
     formContainer.appendChild(docTypeLabel);
     formContainer.appendChild(docTypeSelect);
     docContainer.appendChild(formContainer);
+
+    fileNameInput.addEventListener('input', (event) => {
+      const newName = event.target.value;
+      const doc = this.documentsData.find(doc => doc.id === newDoc.id);
+      if (doc) {
+        doc.document = newName;
+      }
+    });
+    
+    docTypeSelect.addEventListener('change', (event) => {
+      const newType = event.target.value;
+      const doc = this.documentsData.find(doc => doc.id === newDoc.id);
+      if (doc) {
+        doc.document_type = newType;
+      }
+    });
   
     // --- Options Container (Extract, Delete, Download) ---
     const optionsContainer = document.createElement('div');
@@ -1120,6 +1165,17 @@ class PDFThumbnailViewer {
       const docId = newDoc.id;
       const documentData = this.documentsData.find((d) => d.id === docId);
       const pageNumbers = documentData.pages.map((page) => page.pageNumber);
+
+      if (!docTypeSelect.value) {
+        PDFViewerApplication.showGenericMessage("Select a type before extracting data.");
+        return;
+      }
+
+      if (pageNumbers.length == 0) {
+        PDFViewerApplication.showGenericMessage("The document has no pages");
+        return;
+      }
+
       this.eventBus.dispatch('document-container-extract', { source: this, docId, pageNumbers });
     });
     optionsContainer.appendChild(extractIcon);
@@ -1366,15 +1422,6 @@ class PDFThumbnailViewer {
     // Loop over each doc in documentsData
     for (let docIndex = 0; docIndex < this.documentsData.length; docIndex++) {
       const doc = this.documentsData[docIndex];
-      const oldDocId = doc.id; // In case you want to rename its DOM container too.
-      const newDocId = `doc-${docIndex}`;
-      doc.id = newDocId;
-  
-      // If you have a <div> with the old ID in the DOM, rename it:
-      const docContainer = document.getElementById(oldDocId);
-      if (docContainer) {
-        docContainer.id = newDocId;
-      }
   
       // Now loop over the pages in this doc
       for (let pageIndex = 0; pageIndex < doc.pages.length; pageIndex++) {

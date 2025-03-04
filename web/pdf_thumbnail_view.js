@@ -168,8 +168,6 @@ class PDFThumbnailView {
   }
 
   reRenderWithRotation(newRotation) {
-    console.log('>> currentRotation: ' + this.rotation);
-    console.log('>> newRotation: ' + newRotation);
     // 1) Set the user rotation.
     this.rotation = newRotation;
     this.viewport = this.pdfPage.getViewport({ scale: 1, rotation: newRotation });

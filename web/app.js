@@ -1225,7 +1225,7 @@ const PDFViewerApplication = {
 
     this.pdfThumbnailViewer?.enableDragAndDrop(this.editorState == EditorState.EDIT);
     this.pdfThumbnailViewer?.updateThumbnailButtonsVisibility(this.editorState == EditorState.EDIT);
-    this.pdfThumbnailViewer?.toggleEditableIcons(this.editorState == EditorState.EDIT);
+    this.pdfThumbnailViewer?.allowEdition(this.editorState == EditorState.EDIT);
   },
 
   async searchDocumentsInFile() {
@@ -1270,9 +1270,6 @@ const PDFViewerApplication = {
         const data = await response.json();
         const flatPages = data.result.flatMap(doc => doc.pages);
         const newPdfBlob = await this.extractPagesFromPdf(flatPages);
-
-        console.log('newPdfBlob:', newPdfBlob);
-        console.log('Is it a Blob?', newPdfBlob instanceof Blob);
 
         const url = URL.createObjectURL(newPdfBlob);
         // const a = document.createElement('a');
@@ -1473,7 +1470,6 @@ const PDFViewerApplication = {
     for (const docId of docIds) {
       this.pdfThumbnailViewer?.removeDocumentContainer(docId, false);
     }
-    // this.pdfThumbnailViewer?.forceRendering();
     await this.applyChanges();
 
     this.pdfThumbnailViewer?.resetSelectAll();
@@ -1738,6 +1734,8 @@ const PDFViewerApplication = {
     const newOrderedPages = documentsData
       .flatMap(doc => doc.pages)
       .map(p => p.pageNumber);
+
+    // console.log("documentsData:", JSON.stringify(documentsData, null, 2));
 
     // Generate the new PDF with those pages.
     const newPDFUrl = await this.generateNewPDF(newOrderedPages);
@@ -3076,14 +3074,11 @@ const PDFViewerApplication = {
     const messageElement = document.getElementById("popup-message");
     const closeButton = document.getElementById("popup-close");
   
-    // Set the message and the button text.
     messageElement.textContent = message;
     closeButton.textContent = buttonText;
   
-    // Display the popup.
     popup.style.display = "flex";
   
-    // Set up the close button to hide the popup.
     closeButton.onclick = function () {
       popup.style.display = "none";
     };
@@ -4044,4 +4039,4 @@ function beforeUnload(evt) {
   return false;
 }
 
-export { PDFViewerApplication, ViewType };
+export { PDFViewerApplication, ViewType, EditorState };
