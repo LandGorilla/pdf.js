@@ -278,11 +278,12 @@ window.addEventListener('message', function(event) {
     return;
   }
 
-  const { type, token } = event.data;
+  const { type, token, enableExtraFeatures } = event.data;
 
-  if (type === 'SET_TOKEN') {
+  if (type === 'CONFIGURE') {
     if (token) {
       PDFViewerApplication.accessToken = token;
+      PDFViewerApplication.enableExtraFeatures = enableExtraFeatures;
     }
   }
 });

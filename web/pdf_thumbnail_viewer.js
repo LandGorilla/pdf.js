@@ -993,6 +993,14 @@ class PDFThumbnailViewer {
     docContainer.classList.add(`state-${state}`);
   }
 
+  getDocumentState(docId) {
+    if (!this.documentStates.hasOwnProperty(docId)) {
+      console.warn(`Document state for "${docId}" not found.`);
+      return null;
+    }
+    return this.documentStates[docId].state;
+  }
+
   setDocumentState(docId, state) {
     if (!this.documentStates[docId]) return;
     this.documentStates[docId].state = state;
@@ -1008,6 +1016,10 @@ class PDFThumbnailViewer {
   setDocumentResult(docId, jsonResult, htmlContent) {
     this.documentStates[docId].result = htmlContent;
     this.documentStates[docId].json = jsonResult;
+  }
+
+  anyDocumentProcessing() {
+    return Object.values(this.documentStates).some(stateObj => stateObj.state === 'processing');
   }
 
   #displayDocumentForm(docId) {

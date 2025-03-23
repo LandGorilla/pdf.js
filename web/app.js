@@ -112,7 +112,8 @@ const EditorState = Object.freeze({
   EDIT: 'EDIT',
 });
 
-const API_URL = 'http://localhost:8083'; // 'https://research.landgorilla.dev';
+const API_URL = 'https://research.landgorilla.dev';
+// const API_URL = 'http://localhost:8083';
 
 const PDFViewerApplication = {
   initialBookmark: document.location.hash.substring(1),
@@ -1335,46 +1336,58 @@ const PDFViewerApplication = {
   },
 
   async extractDataFromDocuments(docIds) {
+    const isLoading = this.pdfThumbnailViewer?.anyDocumentProcessing();
+    if (isLoading) {
+      this.showGenericMessage("Please wait until the process has finished.");
+      return;
+    }
+
     const allDocs = this.getCurrentDocumentsAndPages() || [];
     let docsToProcess = allDocs;
     if (docIds) {
       docsToProcess = allDocs.filter(docData => docIds.includes(docData.docId));
     }
     
-    console.log(
-      "Extracting data from the following documents:",
-      JSON.stringify(docsToProcess, null, 2)
-    );
+    // Create a progress tracker object: each document starts at 0 progress.
+    const progressMap = {};
+    docsToProcess.forEach(doc => {
+      progressMap[doc.docId] = 0;
+    });
+    const totalDocs = docsToProcess.length;
+  
+    // Helper to update overall progress.
+    const updateOverallProgress = () => {
+      const sum = Object.values(progressMap).reduce((acc, curr) => acc + curr, 0);
+      const overall = sum / totalDocs; // overall progress between 0 and 1
+      this.progress(overall);
+    };
   
     try {
-      // Create a concurrency queue. You can adjust the concurrency level as needed.
       const queue = new ConcurrencyQueue(3);
-  
-      // For each document selected for processing…
+      
       for (const docData of docsToProcess) {
         const docId = docData.docId;
-        // Set the document's state and progress to indicate processing has started.
         this.pdfThumbnailViewer?.setDocumentState(docId, 'processing');
         this.pdfThumbnailViewer?.setDocumentProgress(docId, 0);
-  
-        // Define a task that processes the document.
-        const task = async () => {
-          return this.processDocument(docId, docData);
+        
+        // Define a task that accepts a progress callback.
+        const task = async (progressCallback) => {
+          return this.processDocument(docId, docData, progressCallback);
         };
   
-        // Wrap the task so that errors are caught and logged.
+        // Wrap the task to handle errors and update progress.
         const wrappedTask = () =>
-          task()
-            .then(result => {
-              // The document state is set to 'done' inside processDocument.
-              return result;
-            })
+          task((progressValue) => {
+            // Update this document's progress.
+            progressMap[docId] = progressValue;
+            // Recalculate and update overall progress.
+            updateOverallProgress();
+          }).then(result => result)
             .catch(error => {
               console.error(`Error processing doc ${docId}:`, error);
-              return null; // Alternatively, you could re-throw the error.
+              return null;
             });
   
-        // Add the wrapped task to the queue.
         queue.addTask(wrappedTask);
       }
   
@@ -1388,13 +1401,16 @@ const PDFViewerApplication = {
     }
   },
 
-  async processDocument(docId, docData) {
+  async processDocument(docId, docData, progressCallback = () => {}) {
+    // Start processing: report 0% progress.
+    progressCallback(0);
+
     // Mark the document as "processing" and reset progress
     this.pdfThumbnailViewer?.setDocumentState(docId, 'processing');
     this.pdfThumbnailViewer?.setDocumentProgress(docId, 0);
   
     // Start simulating progress from 0% -> 90% over 5 seconds
-    const control = { accelerate: false };
+    const control = { accelerate: false, currentProgress: 0 };
     const progressSimPromise = this.pdfThumbnailViewer?.simulateDocumentProgress(
       docId,
       0,
@@ -1409,6 +1425,7 @@ const PDFViewerApplication = {
       const newPdfFile = new File([newPdfBlob], 'file.pdf', { type: 'application/pdf' });
       // Optionally show partial progress at 50%
       this.pdfThumbnailViewer?.setDocumentProgress(docId, 50);
+      await this.animateProgress(progressCallback, control.currentProgress || 0, 0.5, 2000);
   
       // Prepare form data
       const formData = new FormData();
@@ -1446,6 +1463,10 @@ const PDFViewerApplication = {
       // Mark doc as done
       this.pdfThumbnailViewer?.setDocumentState(docId, 'done');
       this.pdfThumbnailViewer?.displayFormForCurrentDocument(docId);
+      
+      // Animate the final jump from the simulation’s current progress (assumed ~0.9) to 1.
+      await this.animateProgress(progressCallback, control.currentProgress || 0.9, 1, 500);
+
       return result;
   
     } catch (error) {
@@ -1455,6 +1476,10 @@ const PDFViewerApplication = {
       // Accelerate to 100% (optional: you could also stop at e.g. 50%)
       control.accelerate = true;
       await progressSimPromise;
+
+      // Animate progress from 0.5 to 1 over 500ms
+      await this.animateProgress(progressCallback, control.currentProgress || 0.9, 1, 500);
+
       throw error;
     }
   },
@@ -1712,6 +1737,24 @@ const PDFViewerApplication = {
     });
   },
 
+  animateProgress(callback, start, end, durationInMs) {
+    return new Promise((resolve) => {
+      const startTime = performance.now();
+      function step(now) {
+        const elapsed = now - startTime;
+        const fraction = Math.min(elapsed / durationInMs, 1);
+        const value = start + (end - start) * fraction;
+        callback(value);
+        if (fraction < 1) {
+          requestAnimationFrame(step);
+        } else {
+          resolve();
+        }
+      }
+      requestAnimationFrame(step);
+    });
+  },
+
   editPDF() {
     this.editorState = EditorState.EDIT;
     this.refreshOptions();
@@ -1928,20 +1971,33 @@ const PDFViewerApplication = {
 
   progress(level) {
     const percent = Math.round(level * 100);
-    // When we transition from full request to range requests, it's possible
-    // that we discard some of the loaded data. This can cause the loading
-    // bar to move backwards. So prevent this by only updating the bar if it
-    // increases.
-    if (!this.loadingBar || percent <= this.loadingBar.percent) {
+    if (!this.loadingBar) {
       return;
     }
+  
+    // If a new process starts (level is 0) but the bar is still at 100,
+    // reset the progress so we can update from 0 onward.
+    if (percent === 0 && this.loadingBar.percent === 100) {
+      this.loadingBar.percent = 0;
+    } else if (percent < this.loadingBar.percent) {
+      return;
+    }
+  
+    if (percent >= 100) {
+      // Schedule hiding the bar after a delay.
+      this.hideTimeout = setTimeout(() => {
+        this.loadingBar.hide();
+      }, 300);
+    } else {
+      if (this.hideTimeout) {
+        clearTimeout(this.hideTimeout);
+        this.hideTimeout = null;
+      }
+      this.loadingBar.show();
+    }
+  
     this.loadingBar.percent = percent;
-
-    // When disableAutoFetch is enabled, it's not uncommon for the entire file
-    // to never be fetched (depends on e.g. the file structure). In this case
-    // the loading bar will not be completely filled, nor will it be hidden.
-    // To prevent displaying a partially filled loading bar permanently, we
-    // hide it when no data has been loaded during a certain amount of time.
+  
     if (
       this.pdfDocument?.loadingParams.disableAutoFetch ??
       AppOptions.get("disableAutoFetch")
@@ -2014,7 +2070,7 @@ const PDFViewerApplication = {
       });
 
     firstPagePromise.then(pdfPage => {
-      this.loadingBar?.setWidth(this.appConfig.viewerContainer);
+      // this.loadingBar?.setWidth(this.appConfig.mainContainer);
       this._initializeAnnotationStorageCallbacks(pdfDocument);
 
       Promise.all([
@@ -3271,6 +3327,12 @@ async function onThumbnailReordered({ source, newPDFUrl, documentsData, flatPage
 
 async function onDocumentContainerExtract({ source, docId, pageNumbers }) {
   try {
+    const state = this.pdfThumbnailViewer?.getDocumentState(docId);
+    if (state == 'processing') {
+      this.showGenericMessage("Please wait until the process has finished.");
+      return;
+    }
+
     const docsAndPages = this.getCurrentDocumentsAndPages();
     const docData = docsAndPages.find(d => d.docId === docId);
     if (!docData) {
@@ -3278,7 +3340,9 @@ async function onDocumentContainerExtract({ source, docId, pageNumbers }) {
       return;
     }
 
-    await this.processDocument(docId, docData);
+    await this.processDocument(docId, docData, (progressValue) => {
+      this.progress(progressValue);
+    });
 
     console.log(`Retry for document ${docId} finished successfully.`);
   } catch (error) {
@@ -3295,7 +3359,9 @@ async function onDocumentContainerRetry({ source, docId }) {
       return;
     }
 
-    await this.processDocument(docId, docData);
+    await this.processDocument(docId, docData, (progressValue) => {
+      this.progress(progressValue);
+    });
 
     console.log(`Retry for document ${docId} finished successfully.`);
   } catch (error) {

@@ -36,52 +36,43 @@
   --doorhanger-icon-opacity: 0.9;
   --doorhanger-height: 8px;
 
-  --main-color: rgb(12 12 13);
-  --body-bg-color: rgb(212 212 215);
-  --progressBar-color: rgb(10 132 255);
-  --progressBar-bg-color: rgb(221 221 222);
-  --progressBar-blend-color: rgb(116 177 239);
-  --scrollbar-color: auto;
-  --scrollbar-bg-color: auto;
-  --toolbar-icon-bg-color: rgb(0 0 0);
-  --toolbar-icon-hover-bg-color: rgb(0 0 0);
+  --main-color: rgb(249 249 250);
+  --body-bg-color: rgb(42 42 46);
+  --progressBar-color: rgb(160, 209, 98);
+  --progressBar-bg-color: rgb(40 40 43);
+  --progressBar-blend-color: rgb(20 68 133);
+  --scrollbar-color: rgb(121 121 123);
+  --scrollbar-bg-color: rgb(35 35 39);
+  --toolbar-icon-bg-color: rgb(255 255 255);
+  --toolbar-icon-hover-bg-color: rgb(255 255 255);
 
-  --sidebar-narrow-bg-color: rgb(212 212 215 / 0.9);
-  --sidebar-toolbar-bg-color: rgb(245 246 247);
-  --toolbar-bg-color: rgb(249 249 250);
-  --toolbar-border-color: rgb(184 184 184);
-  --toolbar-box-shadow: 0 1px 0 var(--toolbar-border-color);
-  --toolbar-border-bottom: none;
-  --toolbarSidebar-box-shadow: inset calc(-1px * var(--dir-factor)) 0 0
-      rgb(0 0 0 / 0.25),
-    0 1px 0 rgb(0 0 0 / 0.15), 0 0 1px rgb(0 0 0 / 0.1);
-  --toolbarSidebar-border-bottom: none;
-  --button-hover-color: rgb(221 222 223);
-  --toggled-btn-color: rgb(0 0 0);
+  --sidebar-narrow-bg-color: rgb(42 42 46 / 0.9);
+  --sidebar-toolbar-bg-color: rgb(50 50 52);
+  --toolbar-bg-color: rgb(56 56 61);
+  --toolbar-border-color: rgb(12 12 13);
+  --button-hover-color: rgb(102 102 103);
+  --toggled-btn-color: rgb(255 255 255);
   --toggled-btn-bg-color: rgb(0 0 0 / 0.3);
   --toggled-hover-active-btn-color: rgb(0 0 0 / 0.4);
-  --toggled-hover-btn-outline: none;
-  --dropdown-btn-bg-color: rgb(215 215 219);
-  --dropdown-btn-border: none;
+  --dropdown-btn-bg-color: rgb(74 74 79);
   --separator-color: rgb(0 0 0 / 0.3);
-  --field-color: rgb(6 6 6);
-  --field-bg-color: rgb(255 255 255);
-  --field-border-color: rgb(187 187 188);
-  --treeitem-color: rgb(0 0 0 / 0.8);
-  --treeitem-bg-color: rgb(0 0 0 / 0.15);
-  --treeitem-hover-color: rgb(0 0 0 / 0.9);
-  --treeitem-selected-color: rgb(0 0 0 / 0.9);
-  --treeitem-selected-bg-color: rgb(0 0 0 / 0.25);
-  --thumbnail-hover-color: rgb(0 0 0 / 0.1);
+  --field-color: rgb(250 250 250);
+  --field-bg-color: rgb(64 64 68);
+  --field-border-color: rgb(115 115 115);
+  --treeitem-color: rgb(255 255 255 / 0.8);
+  --treeitem-bg-color: rgb(255 255 255 / 0.15);
+  --treeitem-hover-color: rgb(255 255 255 / 0.9);
+  --treeitem-selected-color: rgb(255 255 255 / 0.9);
+  --treeitem-selected-bg-color: rgb(255 255 255 / 0.25);
+  --thumbnail-hover-color: rgb(255 255 255 / 0.1);
   --thumbnail-selected-color: rgb(160, 209, 98);
-  --doorhanger-bg-color: rgb(255 255 255);
-  --doorhanger-border-color: rgb(12 12 13 / 0.2);
-  --doorhanger-hover-color: rgb(12 12 13);
-  --doorhanger-hover-bg-color: rgb(237 237 237);
-  --doorhanger-separator-color: rgb(222 222 222);
-  --dialog-button-border: none;
-  --dialog-button-bg-color: rgb(12 12 13 / 0.1);
-  --dialog-button-hover-bg-color: rgb(12 12 13 / 0.3);
+  --doorhanger-bg-color: rgb(74 74 79);
+  --doorhanger-border-color: rgb(39 39 43);
+  --doorhanger-hover-color: rgb(249 249 250);
+  --doorhanger-hover-bg-color: rgb(93 94 98);
+  --doorhanger-separator-color: rgb(92 92 97);
+  --dialog-button-bg-color: rgb(92 92 97);
+  --dialog-button-hover-bg-color: rgb(115 115 115);
 
   --loading-icon: url(images/loading.svg);
   --treeitem-expanded-icon: url(images/treeitem-expanded.svg);
@@ -154,48 +145,6 @@
   --inline-start: right;
   --inline-end: left;
   /*#endif*/
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --main-color: rgb(249 249 250);
-    --body-bg-color: rgb(42 42 46);
-    --progressBar-color: rgb(0 96 223);
-    --progressBar-bg-color: rgb(40 40 43);
-    --progressBar-blend-color: rgb(20 68 133);
-    --scrollbar-color: rgb(121 121 123);
-    --scrollbar-bg-color: rgb(35 35 39);
-    --toolbar-icon-bg-color: rgb(255 255 255);
-    --toolbar-icon-hover-bg-color: rgb(255 255 255);
-
-    --sidebar-narrow-bg-color: rgb(42 42 46 / 0.9);
-    --sidebar-toolbar-bg-color: rgb(50 50 52);
-    --toolbar-bg-color: rgb(56 56 61);
-    --toolbar-border-color: rgb(12 12 13);
-    --button-hover-color: rgb(102 102 103);
-    --toggled-btn-color: rgb(255 255 255);
-    --toggled-btn-bg-color: rgb(0 0 0 / 0.3);
-    --toggled-hover-active-btn-color: rgb(0 0 0 / 0.4);
-    --dropdown-btn-bg-color: rgb(74 74 79);
-    --separator-color: rgb(0 0 0 / 0.3);
-    --field-color: rgb(250 250 250);
-    --field-bg-color: rgb(64 64 68);
-    --field-border-color: rgb(115 115 115);
-    --treeitem-color: rgb(255 255 255 / 0.8);
-    --treeitem-bg-color: rgb(255 255 255 / 0.15);
-    --treeitem-hover-color: rgb(255 255 255 / 0.9);
-    --treeitem-selected-color: rgb(255 255 255 / 0.9);
-    --treeitem-selected-bg-color: rgb(255 255 255 / 0.25);
-    --thumbnail-hover-color: rgb(255 255 255 / 0.1);
-    --thumbnail-selected-color: rgb(160, 209, 98);
-    --doorhanger-bg-color: rgb(74 74 79);
-    --doorhanger-border-color: rgb(39 39 43);
-    --doorhanger-hover-color: rgb(249 249 250);
-    --doorhanger-hover-bg-color: rgb(93 94 98);
-    --doorhanger-separator-color: rgb(92 92 97);
-    --dialog-button-bg-color: rgb(92 92 97);
-    --dialog-button-hover-bg-color: rgb(115 115 115);
-  }
 }
 
 @media screen and (forced-colors: active) {
@@ -344,6 +293,34 @@ body {
               margin-inline-end var(--right-sidebar-transition-duration) var(--right-sidebar-transition-timing-function);
 }
 
+#loadingBar {
+  --progressBar-percent: 0; /* Now a number, not a percentage string */
+  --progressBar-end-offset: 0;
+  position: absolute;
+  top: 0;  /* Adjusted for visibility */
+  left: 0;
+  right: 0;
+  height: 4px;
+  transition-property: inset-inline-start;
+  transition-duration: var(--sidebar-transition-duration);
+  transition-timing-function: var(--sidebar-transition-timing-function);
+  z-index: 10000;
+}
+
+#loadingBar .progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  transform: scaleX(var(--progressBar-percent));
+  transform-origin: left center;
+  height: 100%;
+  background-color: var(--progressBar-color);
+  overflow: hidden;
+  transition: transform 300ms ease-in-out; /* Increased duration and smoother easing */
+  will-change: transform; /* Hint for GPU acceleration */
+}
+
 #sidebarContent {
   inset-block: calc(var(--toolbar-height) + var(--editModeContainer-height)) 0;
   inset-inline-start: 0;
@@ -427,10 +404,6 @@ body {
   width: 6px;
   z-index: 200;
   cursor: ew-resize;
-}
-
-#outerContainer.sidebarOpen #loadingBar {
-  inset-inline-start: var(--sidebar-width);
 }
 
 #outerContainer.sidebarResizing
@@ -1637,60 +1610,6 @@ dialog :link {
     #toolbarViewerLeft #numPages.toolbarLabel {
       padding-inline-start: 3px;
       flex: none;
-    }
-  }
-
-  #loadingBar {
-    /* Define these variables here, and not in :root, to avoid reflowing the
-       entire viewer when updating progress (see issue 15958). */
-    --progressBar-percent: 0%;
-    --progressBar-end-offset: 0;
-
-    position: absolute;
-    top: var(--toolbar-height);
-    inset-inline: 0 var(--progressBar-end-offset);
-    height: 4px;
-    background-color: var(--progressBar-bg-color);
-    border-bottom: 1px solid var(--toolbar-border-color);
-    transition-property: inset-inline-start;
-    transition-duration: var(--sidebar-transition-duration);
-    transition-timing-function: var(--sidebar-transition-timing-function);
-
-    .progress {
-      position: absolute;
-      top: 0;
-      inset-inline-start: 0;
-      width: 100%;
-      transform: scaleX(var(--progressBar-percent));
-      transform-origin: calc(50% - 50% * var(--dir-factor)) 0;
-      height: 100%;
-      background-color: var(--progressBar-color);
-      overflow: hidden;
-      transition: transform 200ms;
-    }
-
-    &.indeterminate .progress {
-      transform: none;
-      background-color: var(--progressBar-bg-color);
-      transition: none;
-
-      .glimmer {
-        position: absolute;
-        top: 0;
-        inset-inline-start: 0;
-        height: 100%;
-        width: calc(100% + 150px);
-        background: repeating-linear-gradient(
-          135deg,
-          var(--progressBar-blend-color) 0,
-          var(--progressBar-bg-color) 5px,
-          var(--progressBar-bg-color) 45px,
-          var(--progressBar-color) 55px,
-          var(--progressBar-color) 95px,
-          var(--progressBar-blend-color) 100px
-        );
-        animation: progressIndeterminate 1s linear infinite;
-      }
     }
   }
 }

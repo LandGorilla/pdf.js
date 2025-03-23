@@ -704,7 +704,7 @@ class ProgressBar {
       return;
     }
     const container = viewer.parentNode;
-    const scrollbarWidth = container.offsetWidth - viewer.offsetWidth;
+    const scrollbarWidth = container.offsetWidth;
     if (scrollbarWidth > 0) {
       this.#style.setProperty(
         "--progressBar-end-offset",
