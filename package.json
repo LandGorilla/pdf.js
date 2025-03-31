@@ -69,5 +69,12 @@
   "dependencies": {
     "pdf-lib": "^1.17.1",
     "sortablejs": "^1.15.3"
+  },
+  "files": [
+    "build/generic/build/",
+    "build/generic/web/"
+  ],
+  "scripts": {
+    "prepare": "npx gulp generic"
   }
 }
